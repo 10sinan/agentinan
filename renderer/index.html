@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'sha256-QHspYcLLOKSarKa9WCONpLgp80qJjPebMyusqjGSeoo='" />
+    <title>Agentinan</title>
+    <link rel="stylesheet" href="../node_modules/@xterm/xterm/css/xterm.css" />
+    <link rel="stylesheet" href="style.css" />
+    <script type="importmap">{"imports":{"three":"../node_modules/three/build/three.module.js","three/addons/":"../node_modules/three/examples/jsm/"}}</script>
+  </head>
+  <body>
+    <header>
+      <div class="brand"><span class="logo"></span>Agentinan</div>
+      <button class="primary" id="newBtn" title="Agentinan'dan başlatılan oturumlara komut verebilirsin">+ Yeni oturum</button>
+      <div class="today" id="today"></div>
+      <div class="toggles">
+        <label title="Bir oturum onay ya da cevap beklediğinde"><input type="checkbox" id="nWaiting" /> Bekleyince bildir</label>
+        <label title="Bir oturum işini bitirdiğinde (pencere öndeyken gelmez)"><input type="checkbox" id="nDone" /> Bitince bildir</label>
+      </div>
+    </header>
+    <main>
+      <section class="map">
+        <div class="stage">
+          <div id="scene"></div>
+          <div class="empty3d" id="empty3d" hidden>Yörüngede oturum yok · <b>+ Yeni oturum</b> ile başlat</div>
+          <div class="legend">
+            <span><i class="dot busy"></i>Çalışıyor</span>
+            <span><i class="dot waiting"></i>Seni bekliyor</span>
+            <span><i class="dot idle"></i>Boşta</span>
+            <span><i class="moon"></i>Alt ajan</span>
+            <span>›_ Komut verilebilir</span>
+          </div>
+          <div class="hint">Sürükle: döndür · Tekerlek: yakınlaş · Gezegene tıkla: seç</div>
+          <div class="tooltip" id="tip" hidden></div>
+        </div>
+        <div id="console" hidden>
+          <div class="con-head">
+            <span class="con-title" id="conTitle"></span>
+            <span class="con-note" id="conNote"></span>
+            <span class="spacer"></span>
+            <button id="conApprove" title="Claude'un sorduğu onayı verir (Enter)">✓ Onayla</button>
+            <button id="conReject" title="Soruyu reddeder ya da Claude'u durdurur (Esc)">✕ Reddet / Durdur</button>
+            <button id="conStop" class="danger" title="Oturumu tamamen kapatır">Oturumu kapat</button>
+            <button id="conHide" class="ghost" title="Paneli gizle">▾</button>
+          </div>
+          <div class="term"></div>
+          <form class="con-input" id="conForm">
+            <input id="conText" autocomplete="off" placeholder="Claude'a yaz ve Enter'a bas…" />
+            <button type="submit" class="primary">Gönder</button>
+          </form>
+        </div>
+      </section>
+      <aside id="list"></aside>
+    </main>
+
+    <div class="modal" id="newModal" hidden>
+      <form class="modal-box" id="newForm">
+        <h2>Yeni Claude oturumu</h2>
+        <label>Klasör</label>
+        <div class="row">
+          <input id="newCwd" readonly placeholder="Claude'un çalışacağı proje klasörü" />
+          <button type="button" id="newPick">Seç…</button>
+        </div>
+        <label>İsim <span class="opt">(isteğe bağlı)</span></label>
+        <input id="newName" maxlength="60" placeholder="örn. web-sitesi" />
+        <label>İlk komut <span class="opt">(isteğe bağlı)</span></label>
+        <textarea id="newPrompt" rows="3" placeholder="örn. bu projedeki testleri çalıştır ve hataları düzelt"></textarea>
+        <div class="modal-err" id="newErr"></div>
+        <div class="modal-actions">
+          <button type="button" class="ghost" id="newCancel">İptal</button>
+          <button type="submit" class="primary" id="newGo">Başlat</button>
+        </div>
+      </form>
+    </div>
+
+    <script src="../node_modules/@xterm/xterm/lib/xterm.js"></script>
+    <script src="../node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
+    <script src="app.js"></script>
+    <script src="console.js"></script>
+    <script type="module" src="orbit3d.js"></script>
+  </body>
+</html>
