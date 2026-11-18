@@ -132,7 +132,7 @@ function renderLimits() {
     : 'kapalı';
   $('limToggle').textContent = L.enabled ? 'Kaldır' : 'Etkinleştir';
   if (!L.enabled) {
-    el.innerHTML = `<button class="lim-enable" id="limOpen" title="5 saatlik ve haftalık plan limitlerini göster">limitleri göster</button>`;
+    el.innerHTML = ''; // off: the switch lives in Ayarlar, no placeholder in the top bar
     return;
   }
   if (!L.fiveHour && !L.week) {

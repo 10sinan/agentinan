@@ -929,8 +929,12 @@ textarea:focus {
   white-space: nowrap;
 }
 .titem .tn span {
+  display: block;
   font-size: 11px;
   color: var(--text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .tlist .btn {
   margin-top: 8px;
@@ -1337,6 +1341,10 @@ body.low:not([data-tab='map']) #scene {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.g-head .pill.ctl {
   flex-shrink: 1;
 }
 .g-head .btn {
