@@ -4,11 +4,24 @@ const path = require('path');
 const { Collector } = require('./collector');
 const { Terminals } = require('./terminals');
 const { Git } = require('./git');
+const { Monitor } = require('./monitor');
 
 app.commandLine.appendSwitch('ozone-platform-hint', 'auto'); // native Wayland when available (Fedora's default session)
 
 const POLL_MS = 1500;
-const DEFAULTS = { notifyWaiting: true, notifyDone: true, quality: 'high', theme: 'agentinan', gitRepos: [] };
+const DEFAULTS = {
+  notifyWaiting: true,
+  notifyDone: true,
+  quality: 'high',
+  theme: 'agentinan',
+  gitRepos: [],
+  // a process "strains the PC" when it uses hogCpu % of a core for hogSecs seconds, or hogMem % of the RAM
+  hogAlert: true,
+  hogCpu: 90,
+  hogSecs: 15,
+  hogMem: 30,
+  hogIgnore: [],
+};
 
 let win = null;
 let settings = { ...DEFAULTS };
@@ -74,6 +87,8 @@ function annotate(snap) {
 let prev = null; // sessionId → status from the last poll
 let lastSnap = null;
 const gitApi = new Git();
+const monitor = new Monitor();
+let hogs = [];
 
 function poll() {
   let snap;
@@ -97,6 +112,27 @@ function poll() {
     }
   }
   prev = now;
+
+  // Processes straining the computer, each tied to the session that started it when there is one.
+  try {
+    const byPid = new Map(snap.sessions.map((s) => [s.pid, s]));
+    hogs = settings.hogAlert
+      ? monitor.sample(new Set(byPid.keys()), { cpu: settings.hogCpu, cpuSecs: settings.hogSecs, memPct: settings.hogMem, ignore: settings.hogIgnore })
+      : [];
+    for (const h of hogs) {
+      const s = byPid.get(h.sessionPid);
+      h.sessionId = s ? s.id : null;
+      h.sessionName = s ? s.name : null;
+      if (h.fresh) {
+        const what = h.reason === 'mem' ? `belleğin %${h.memPct}'ini kullanıyor` : `işlemciyi %${h.cpu} kullanıyor`;
+        notify(`⚠ ${h.name} bilgisayarı yoruyor`, `${what}${s ? ` · ${s.name} oturumundan` : ''}`, s ? s.id : null);
+      }
+      delete h.fresh;
+    }
+  } catch (e) {
+    console.error('monitor failed', e);
+  }
+  snap.hogs = hogs;
   lastSnap = snap;
   if (win && !win.isDestroyed()) win.webContents.send('snapshot', snap);
 }
@@ -181,6 +217,19 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.handle('git:push', wrap((r) => gitApi.push(r)));
     ipcMain.handle('git:pull', wrap((r) => gitApi.pull(r)));
     ipcMain.handle('git:fetch', wrap((r) => gitApi.fetch(r)));
+    ipcMain.handle(
+      'proc:kill',
+      wrap((pid, key, force) => monitor.kill(Number(pid), String(key), !!force, hogs)),
+    );
+    ipcMain.handle(
+      'proc:ignore',
+      wrap((name) => {
+        name = String(name).slice(0, 64);
+        if (!settings.hogIgnore.includes(name)) settings.hogIgnore = [...settings.hogIgnore, name];
+        saveSettings();
+        return settings;
+      }),
+    );
     ipcMain.on('term:input', (_e, { key, data }) => terminals.write(String(key), data));
     ipcMain.on('term:line', (_e, { key, text }) => terminals.sendLine(String(key), text));
     ipcMain.on('term:resize', (_e, { key, cols, rows }) => terminals.resize(String(key), cols | 0, rows | 0));

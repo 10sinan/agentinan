@@ -62,6 +62,11 @@ const controlPill = (s) =>
     ? `<span class="pill ctl">${icon('terminal')}Komut verilebilir</span>`
     : `<span class="pill" title="Komut vermek için oturumu Agentinan'dan başlat">${icon('eye')}Sadece izleme</span>`;
 
+function hogPill(s) {
+  const h = (snap.hogs || []).find((x) => x.sessionId === s.id);
+  return h ? `<div class="hog-pill">${icon('flame')}${esc(h.name)} bilgisayarı yoruyor · %${h.cpu} işlemci</div>` : '';
+}
+
 // ---------- tabs ----------
 function setTab(name) {
   if (!TITLES[name]) return;
@@ -139,7 +144,7 @@ function card(s) {
   return `
   <div class="card ${s.status}${s.id === selected ? ' sel' : ''}" data-id="${esc(s.id)}">
     <div class="c-top"><span class="c-name">${esc(s.name)}</span>${statusPill(s)}</div>
-    <div class="c-meta">${controlPill(s)}<span>${esc(s.project)} · ${esc(s.model || 'model yok')} · ${ago(s.statusSince)}${waiting}</span></div>
+    ${hogPill(s)}<div class="c-meta">${controlPill(s)}<span>${esc(s.project)} · ${esc(s.model || 'model yok')} · ${ago(s.statusSince)}${waiting}</span></div>
     ${s.lastPrompt ? `<div class="c-prompt">${esc(s.lastPrompt)}</div>` : ''}
     ${s.lastText ? `<div class="c-reply">${esc(s.lastText)}</div>` : ''}
     ${tools ? `<div class="c-tools">${tools}</div>` : ''}
@@ -237,6 +242,13 @@ function applySettings() {
     localStorage.setItem('theme', settings.theme);
   } catch {}
   renderThemes();
+  $('hogAlertSw').checked = settings.hogAlert;
+  for (const seg of document.querySelectorAll('.seg[data-setting]'))
+    for (const b of seg.querySelectorAll('button')) b.classList.toggle('active', Number(b.dataset.v) === settings[seg.dataset.setting]);
+  const ign = settings.hogIgnore || [];
+  $('hogIgnoreList').innerHTML = ign.length
+    ? ign.map((n) => `<button class="ign-chip" data-n="${esc(n)}" title="Tekrar uyar">${esc(n)} ${icon('x')}</button>`).join('')
+    : 'Yok';
   window.dispatchEvent(new CustomEvent('dash:settings', { detail: settings }));
 }
 async function saveSettings(patch) {
@@ -245,6 +257,20 @@ async function saveSettings(patch) {
 }
 $('nWaiting').onchange = () => saveSettings({ notifyWaiting: $('nWaiting').checked });
 $('nDone').onchange = () => saveSettings({ notifyDone: $('nDone').checked });
+$('hogAlertSw').onchange = () => saveSettings({ hogAlert: $('hogAlertSw').checked });
+for (const seg of document.querySelectorAll('.seg[data-setting]'))
+  seg.addEventListener('click', (e) => {
+    const v = e.target.closest('button')?.dataset.v;
+    if (v) saveSettings({ [seg.dataset.setting]: Number(v) });
+  });
+$('hogIgnoreList').addEventListener('click', (e) => {
+  const n = e.target.closest('.ign-chip')?.dataset.n;
+  if (n) saveSettings({ hogIgnore: (settings.hogIgnore || []).filter((x) => x !== n) });
+});
+window.addEventListener('dash:settings-reload', async () => {
+  settings = { ...settings, ...(await api.getSettings()) };
+  applySettings();
+});
 $('quality').addEventListener('click', (e) => {
   const q = e.target.closest('button')?.dataset.q;
   if (q) saveSettings({ quality: q });
@@ -282,6 +308,7 @@ window.dash = {
   ago,
   toast,
   snap: () => snap,
+  hogs: () => snap.hogs || [],
   selected: () => selected,
   select,
   tab: () => tab,

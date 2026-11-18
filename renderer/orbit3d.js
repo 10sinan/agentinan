@@ -169,6 +169,9 @@ const STATUS = {
   waiting: new THREE.Color(D.COLORS.waiting),
   idle: new THREE.Color(D.COLORS.idle),
 };
+const HOT_A = new THREE.Color('#ff2a12');
+const HOT_B = new THREE.Color('#ffd25a');
+const HOT = new THREE.Color();
 const ORBIT = { line: new THREE.Color('#7d8cc4'), selected: new THREE.Color('#a78bfa') };
 
 // Theme: space colour, status colours (planets ease toward them), orbit lines.
@@ -328,6 +331,11 @@ function layout(sessions) {
     p.el.className = `planet-label ${s.status}${s.id === D.selected() ? ' sel' : ''}`;
     p.el.innerHTML = `<b>${s.control ? '<i class="ctl">›_</i>' : ''}${D.esc(s.name)}</b><span>${D.LABELS[s.status] || D.esc(s.status)}${waiting} · ${D.fmtTok(s.tokens.total)}</span>`;
     syncMoons(p, s.subagents.filter((a) => a.active).length);
+    // a process this session started is straining the PC: the planet overheats
+    const hog = D.hogs().find((h) => h.sessionId === s.id);
+    p.hot = !!hog;
+    p.el.classList.toggle('hot', p.hot);
+    if (hog) p.el.innerHTML += `<em class="heat">AŞIRI ISINMA · ${D.esc(hog.name)} %${hog.cpu}</em>`;
   });
   const live = new Set(sessions.map((s) => s.id));
   for (const [id, p] of planets) {
@@ -401,7 +409,7 @@ labels.domElement.addEventListener('pointermove', (e) => {
   labels.domElement.style.cursor = hoverId ? 'pointer' : 'grab';
   const s = hoverId && D.snap().sessions.find((v) => v.id === hoverId);
   if (!s) return void (tip.hidden = true);
-  const r = tip.offsetParent.getBoundingClientRect(); // the tooltip lives in the map view, not the full-window scene
+  const r = (tip.offsetParent || tip.parentElement).getBoundingClientRect(); // the tooltip lives in the map view, not the full-window scene
   const lt = s.recentTools[s.recentTools.length - 1];
   tip.innerHTML =
     `<b>${D.esc(s.name)}</b><br><span class="m">${D.esc(s.cwd)}</span><br>` +
@@ -426,6 +434,51 @@ labels.domElement.addEventListener('pointerup', (e) => {
 // Fly the camera's focus toward the selected planet; back to the sun when nothing is selected.
 const focus = new THREE.Vector3();
 window.addEventListener('dash:select', () => layout(D.snap().sessions));
+
+// ---------- embers: sparks flying off an overheating planet ----------
+const EMBERS = 180;
+const emberGeo = new THREE.BufferGeometry();
+emberGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(EMBERS * 3), 3));
+emberGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(EMBERS * 3), 3));
+const embers = new THREE.Points(
+  emberGeo,
+  new THREE.PointsMaterial({ size: 18, map: GLOW, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }),
+);
+embers.frustumCulled = false;
+scene.add(embers);
+const emberState = Array.from({ length: EMBERS }, () => ({ p: null, life: 1, rate: 1, dir: new THREE.Vector3(), reach: 0 }));
+const EMBER_HOT = new THREE.Color('#ffe08a');
+const EMBER_COOL = new THREE.Color('#ff2a12');
+const emberColor = new THREE.Color();
+
+function updateEmbers(dt) {
+  const hot = [...planets.values()].filter((p) => p.hot);
+  const pos = emberGeo.attributes.position;
+  const col = emberGeo.attributes.color;
+  emberState.forEach((e, i) => {
+    e.life += dt * e.rate;
+    if (e.life >= 1 || !e.p || !planets.has(e.p.id) || !e.p.hot) {
+      if (!hot.length) {
+        col.setXYZ(i, 0, 0, 0);
+        e.p = null;
+        return;
+      }
+      e.p = hot[i % hot.length];
+      e.life = Math.random() * 0.4;
+      e.rate = 0.7 + Math.random() * 0.9;
+      e.dir.randomDirection();
+      e.dir.y = Math.abs(e.dir.y) * 1.4 + 0.2; // mostly upward, like heat
+      e.dir.normalize();
+      e.reach = e.p.size * (1.5 + Math.random() * 3);
+    }
+    const d = e.p.size * 0.9 + e.life * e.reach;
+    pos.setXYZ(i, e.p.group.position.x + e.dir.x * d, e.p.group.position.y + e.dir.y * d, e.p.group.position.z + e.dir.z * d);
+    emberColor.copy(EMBER_HOT).lerp(EMBER_COOL, e.life).multiplyScalar(1 - e.life * e.life);
+    col.setXYZ(i, emberColor.r, emberColor.g, emberColor.b);
+  });
+  pos.needsUpdate = true;
+  col.needsUpdate = true;
+}
 
 // ---------- animation ----------
 const clock = new THREE.Clock();
@@ -459,26 +512,35 @@ function animate(now = 0) {
     const speed = p.status === 'busy' ? 0.32 : p.status === 'waiting' ? 0 : 0.035;
     p.angle += (speed * dt * 140) / p.radius;
     orbitPoint(p, p.angle, p.group.position);
-    p.mesh.scale.setScalar(p.size);
+    if (p.hot) {
+      // shake
+      const k = p.size * 0.18;
+      p.group.position.x += (Math.random() - 0.5) * k;
+      p.group.position.y += (Math.random() - 0.5) * k;
+      p.group.position.z += (Math.random() - 0.5) * k;
+    }
+    p.mesh.scale.setScalar(p.size * (p.hot ? 1.15 + Math.sin(t * 9) * 0.06 : 1));
     p.mesh.rotation.y += dt * p.spin;
     if (p.ring) p.ring.scale.setScalar(p.size);
 
-    const target = STATUS[p.status] || STATUS.idle;
-    p.color.lerp(target, Math.min(1, dt * 4));
+    // overheating flickers between red-hot and yellow-hot; otherwise ease toward the status colour
+    const target = p.hot ? HOT.copy(HOT_A).lerp(HOT_B, 0.5 + 0.5 * Math.sin(t * 13)) : STATUS[p.status] || STATUS.idle;
+    p.color.lerp(target, Math.min(1, dt * (p.hot ? 12 : 4)));
     p.mesh.material.color.copy(p.color);
-    p.mesh.material.emissive.copy(p.color).multiplyScalar(p.status === 'idle' ? 0.12 : 0.32);
+    p.mesh.material.emissive.copy(p.color).multiplyScalar(p.hot ? 0.95 : p.status === 'idle' ? 0.12 : 0.32);
     p.halo.material.color.copy(p.color);
-    p.halo.scale.setScalar(p.size * (p.status === 'idle' ? 3.2 : 4.4 + Math.sin(t * 3) * 0.3));
-    p.halo.material.opacity = p.status === 'idle' ? 0.35 : 0.6;
+    p.halo.scale.setScalar(p.size * (p.hot ? 8 + Math.sin(t * 7) * 1.4 : p.status === 'idle' ? 3.2 : 4.4 + Math.sin(t * 3) * 0.3));
+    p.halo.material.opacity = p.hot ? 0.9 : p.status === 'idle' ? 0.35 : 0.6;
 
     p.label.position.set(0, -p.size - 6, 0);
 
     // waiting pulse: a ring facing the camera that grows and fades
-    if (p.status === 'waiting') {
-      const ph = (t * 0.85) % 1;
+    if (p.status === 'waiting' || p.hot) {
+      const ph = (t * (p.hot ? 1.8 : 0.85)) % 1;
       p.pulse.position.copy(p.group.position);
       p.pulse.quaternion.copy(camera.quaternion);
-      p.pulse.scale.setScalar(p.size * (1.3 + ph * 2.4));
+      p.pulse.scale.setScalar(p.size * (1.3 + ph * (p.hot ? 4 : 2.4)));
+      p.pulse.material.color.copy(p.hot ? HOT_A : STATUS.waiting);
       p.pulse.material.opacity = 0.9 * (1 - ph);
     } else p.pulse.material.opacity = 0;
 
@@ -513,6 +575,8 @@ function animate(now = 0) {
       m.scale.setScalar(0.22);
     });
   }
+
+  updateEmbers(dt);
 
   // sparks
   for (let i = sparks.length - 1; i >= 0; i--) {

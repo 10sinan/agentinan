@@ -20,6 +20,10 @@ contextBridge.exposeInMainWorld('agentinan', {
   onTermData: (fn) => ipcRenderer.on('term:data', (_e, m) => fn(m)),
   onTermExit: (fn) => ipcRenderer.on('term:exit', (_e, m) => fn(m)),
 
+  // processes straining the PC; resolve to { data } or { error }
+  killProc: (pid, key, force) => ipcRenderer.invoke('proc:kill', pid, key, force),
+  ignoreProc: (name) => ipcRenderer.invoke('proc:ignore', name),
+
   // Source Control; each call resolves to { data } or { error }
   git: {
     repos: () => ipcRenderer.invoke('git:repos'),
