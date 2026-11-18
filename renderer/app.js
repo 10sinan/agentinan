@@ -57,15 +57,7 @@ function toast(text) {
 const statusPill = (s) =>
   `<span class="pill ${s.status}"><i class="sdot ${s.status}"></i>${LABELS[s.status] || esc(s.status)}</span>`;
 
-const controlPill = (s) =>
-  s.control
-    ? `<span class="pill ctl">${icon('terminal')}Komut verilebilir</span>`
-    : `<span class="pill" title="Komut vermek için oturumu Agentinan'dan başlat">${icon('eye')}Sadece izleme</span>`;
 
-function hogPill(s) {
-  const h = (snap.hogs || []).find((x) => x.sessionId === s.id);
-  return h ? `<div class="hog-pill">${icon('flame')}${esc(h.name)} bilgisayarı yoruyor · %${h.cpu} işlemci</div>` : '';
-}
 
 // ---------- tabs ----------
 function setTab(name) {
@@ -109,18 +101,20 @@ function renderBadges() {
   set($('badgeTerminal'), waiting.filter((s) => s.control).length);
 }
 
-// ---------- sessions grid ----------
+// ---------- sessions table ----------
+// One row per session (like htop); the selected row opens a detail panel under it.
 const FILTERS = [
-  ['all', 'Tümü', () => true],
-  ['busy', 'Çalışan', (s) => s.status === 'busy'],
-  ['waiting', 'Bekleyen', (s) => s.status === 'waiting'],
-  ['control', 'Komut verilebilir', (s) => !!s.control],
+  ['all', 'tümü', () => true],
+  ['busy', 'çalışan', (s) => s.status === 'busy'],
+  ['waiting', 'bekleyen', (s) => s.status === 'waiting'],
+  ['control', 'komut verilebilir', (s) => !!s.control],
 ];
+const STATUS_WORD = { busy: 'çalışıyor', waiting: 'bekliyor', idle: 'boşta' };
 
 function renderFilters() {
   $('filters').innerHTML = FILTERS.map(([key, label, fn]) => {
     const n = snap.sessions.filter(fn).length;
-    return `<button class="filter${filter === key ? ' active' : ''}" data-f="${key}">${label}<em>${n}</em></button>`;
+    return `<button class="filter${filter === key ? ' active' : ''}" data-f="${key}">${label} <em>${n}</em></button>`;
   }).join('');
 }
 $('filters').addEventListener('click', (e) => {
@@ -131,35 +125,62 @@ $('filters').addEventListener('click', (e) => {
   renderGrid();
 });
 
-function card(s) {
-  const now = Date.now();
-  const tools = s.recentTools
-    .slice(-4)
-    .reverse()
-    .map((t) => `<span class="chip${now - t.ts < 8000 && s.status === 'busy' ? ' live' : ''}"><b>${esc(t.name)}</b>${t.brief ? ' ' + esc(t.brief) : ''}</span>`)
-    .join('');
-  const agents = s.subagents.filter((a) => a.active).length;
+function row(s) {
   const pct = Math.min(100, (s.context / ctxLimit(s)) * 100);
-  const waiting = s.status === 'waiting' && s.waitingFor ? ` · ${esc(s.waitingFor)}` : '';
+  const lt = s.recentTools[s.recentTools.length - 1];
+  const hog = (snap.hogs || []).find((x) => x.sessionId === s.id);
   return `
-  <div class="card ${s.status}${s.id === selected ? ' sel' : ''}" data-id="${esc(s.id)}">
-    <div class="c-top"><span class="c-name">${esc(s.name)}</span>${statusPill(s)}</div>
-    ${hogPill(s)}<div class="c-meta">${controlPill(s)}<span>${esc(s.project)} · ${esc(s.model || 'model yok')} · ${ago(s.statusSince)}${waiting}</span></div>
-    ${s.lastPrompt ? `<div class="c-prompt">${esc(s.lastPrompt)}</div>` : ''}
-    ${s.lastText ? `<div class="c-reply">${esc(s.lastText)}</div>` : ''}
-    ${tools ? `<div class="c-tools">${tools}</div>` : ''}
-    <div class="c-stats">
-      <div><span>Token</span><b>${fmtTok(s.tokens.total)}</b></div>
-      <div><span>Maliyet*</span><b>${fmtCost(s.cost)}</b></div>
-      <div><span>Araç</span><b>${s.toolCount}</b></div>
-      <div><span>Alt ajan</span><b>${agents}/${s.subagents.length}</b></div>
+  <div class="srow ${s.status}${s.id === selected ? ' sel' : ''}" data-id="${esc(s.id)}">
+    <span class="c-st"><i class="sdot ${s.status}"></i>${STATUS_WORD[s.status] || esc(s.status)}</span>
+    <span class="c-nm">${esc(s.name)}${s.control ? ' <em class="tag">ctl</em>' : ''}${hog ? ' <em class="tag hot">yoruyor</em>' : ''}</span>
+    <span class="c-pj" title="${esc(s.cwd)}">${esc(s.project)}</span>
+    <span class="c-md">${esc(s.model || '—')}</span>
+    <span class="c-num">${fmtTok(s.tokens.total)}</span>
+    <span class="c-num">${fmtCost(s.cost)}</span>
+    <span class="c-ctx" title="Bağlam: ${s.context.toLocaleString('tr-TR')} / ${fmtTok(ctxLimit(s))} token"><i><b style="width:${pct.toFixed(1)}%"></b></i>${Math.round(pct)}%</span>
+    <span class="c-tl">${lt ? `${esc(lt.name)} <small>${esc(lt.brief)}</small>` : '—'}</span>
+    <span class="c-num dim">${ago(s.statusSince)}</span>
+  </div>
+  ${s.id === selected ? detail(s, hog) : ''}`;
+}
+
+function detail(s, hog) {
+  const tools = s.recentTools
+    .slice(-8)
+    .reverse()
+    .map((t) => `<div><b>${esc(t.name)}</b> ${esc(t.brief)} <small>${ago(t.ts)}</small></div>`)
+    .join('');
+  const agents = s.subagents.filter((a) => a.active);
+  return `
+  <div class="sdetail" data-id="${esc(s.id)}">
+    <div class="sd-main">
+      ${hog ? `<div class="sd-hog">${esc(hog.name)} bilgisayarı yoruyor · %${hog.cpu} işlemci</div>` : ''}
+      ${s.status === 'waiting' && s.waitingFor ? `<div class="sd-wait">bekliyor: ${esc(s.waitingFor)}</div>` : ''}
+      <div class="sd-k">son istek</div>
+      <div class="sd-v">${esc(s.lastPrompt) || '—'}</div>
+      <div class="sd-k">son cevap</div>
+      <div class="sd-v dim">${esc(s.lastText) || '—'}</div>
+      ${agents.length ? `<div class="sd-k">çalışan alt ajanlar</div><div class="sd-v">${agents.map((a) => esc(a.desc || a.type)).join(', ')}</div>` : ''}
     </div>
-    <div class="ctx" title="Bağlam: ${s.context.toLocaleString('tr-TR')} / ${fmtTok(ctxLimit(s))} token"><i style="width:${pct.toFixed(1)}%"></i></div>
-    <div class="c-actions">
-      <button class="btn sm" data-act="map">${icon('target')}Haritada</button>
-      ${s.control ? `<button class="btn sm" data-act="term">${icon('terminal')}Terminal</button>` : ''}
-      <button class="btn sm ghost" data-act="open" title="Klasörü aç">${icon('folder')}</button>
-      <button class="btn sm ghost" data-act="resume" title="claude --resume komutunu kopyala">${icon('copy')}</button>
+    <div class="sd-side">
+      <div class="sd-k">son araçlar</div>
+      <div class="sd-tools">${tools || '—'}</div>
+      <div class="sd-k">token</div>
+      <div class="sd-kv">
+        <span>giriş</span><b>${fmtTok(s.tokens.input)}</b>
+        <span>çıkış</span><b>${fmtTok(s.tokens.output)}</b>
+        <span>önbellek yazma</span><b>${fmtTok(s.tokens.cacheWrite5m + s.tokens.cacheWrite1h)}</b>
+        <span>önbellek okuma</span><b>${fmtTok(s.tokens.cacheRead)}</b>
+        <span>araç çağrısı</span><b>${s.toolCount}</b>
+        <span>pid</span><b>${s.pid}</b>
+      </div>
+      <div class="sd-path" title="${esc(s.cwd)}">${esc(s.cwd)}</div>
+      <div class="sd-actions">
+        <button class="btn sm" data-act="map">haritada</button>
+        ${s.control ? `<button class="btn sm" data-act="term">terminal</button>` : ''}
+        <button class="btn sm" data-act="open">klasör</button>
+        <button class="btn sm" data-act="resume" title="claude --resume komutunu kopyala">--resume</button>
+      </div>
     </div>
   </div>`;
 }
@@ -169,14 +190,15 @@ function renderGrid() {
   const fn = FILTERS.find((f) => f[0] === filter)[2];
   const list = snap.sessions.filter(fn);
   const scroll = grid.scrollTop;
+  const head = `<div class="srow shead"><span>durum</span><span>oturum</span><span>proje</span><span>model</span><span class="c-num">token</span><span class="c-num">maliyet*</span><span>bağlam</span><span>son araç</span><span class="c-num">süre</span></div>`;
   grid.innerHTML = list.length
-    ? list.map(card).join('')
-    : `<div class="grid-empty">${snap.sessions.length ? 'Bu filtreye uyan oturum yok.' : 'Şu an çalışan Claude Code oturumu yok.'}</div>`;
+    ? head + list.map(row).join('') + `<div class="sfoot">* API liste fiyatıyla tahmin. Satıra tıkla: ayrıntı.</div>`
+    : `<div class="grid-empty">${snap.sessions.length ? 'bu filtreye uyan oturum yok' : 'çalışan Claude Code oturumu yok'}</div>`;
   grid.scrollTop = scroll;
 }
 
 $('grid').addEventListener('click', (e) => {
-  const el = e.target.closest('.card');
+  const el = e.target.closest('.srow[data-id], .sdetail');
   if (!el) return;
   const s = snap.sessions.find((x) => x.id === el.dataset.id);
   const act = e.target.closest('button')?.dataset.act;
@@ -186,9 +208,15 @@ $('grid').addEventListener('click', (e) => {
     api.copy(`cd ${JSON.stringify(s.cwd)} && claude --resume ${s.id}`);
     return toast('Devam komutu kopyalandı');
   }
-  select(s.id);
-  if (act === 'map') setTab('map');
-  if (act === 'term') setTab('terminal');
+  if (act === 'map') {
+    select(s.id);
+    return setTab('map');
+  }
+  if (act === 'term') {
+    select(s.id);
+    return setTab('terminal');
+  }
+  if (el.classList.contains('srow')) select(selected === s.id ? null : s.id);
 });
 
 // ---------- map info card ----------
@@ -228,7 +256,7 @@ function select(id, reveal) {
   renderGrid();
   renderMapCard();
   window.dispatchEvent(new CustomEvent('dash:select', { detail: id }));
-  if (id && reveal) $('grid').querySelector(`.card[data-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  if (id && reveal) $('grid').querySelector(`.srow[data-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
 // ---------- settings ----------

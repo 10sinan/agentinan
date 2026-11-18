@@ -485,7 +485,7 @@ const clock = new THREE.Clock();
 const tmp = new THREE.Vector3();
 const camDir = new THREE.Vector3();
 
-// Full frame rate only while the map tab is open; behind other tabs the map is blurred, so a few frames are enough.
+// Drawn only while the map tab is open (capped at 30 fps on low quality).
 let lastFrame = 0;
 const placed = [];
 const proj = new THREE.Vector3();
@@ -494,7 +494,8 @@ function animate(now = 0) {
   requestAnimationFrame(animate);
   const onMap = D.tab() === 'map';
   const low = D.settings().quality === 'low';
-  const gap = onMap ? (low ? 1000 / 30 : 0) : 1000 / (low ? 6 : 20);
+  if (!onMap) return; // the map is hidden behind the other tabs: draw nothing
+  const gap = low ? 1000 / 30 : 0;
   if (now - lastFrame < gap) return;
   lastFrame = now;
   controls.enabled = onMap;

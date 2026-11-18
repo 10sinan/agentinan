@@ -4,7 +4,7 @@
 Bir oturum onay ya da cevap beklediğinde, ya da işini bitirdiğinde masaüstü bildirimi gönderir.
 [Orbiterm](https://github.com/atalaykarahan/orbiterm) fikrinden esinlenildi, ama kod sıfırdan yazıldı.
 
-Arayüz beş sekmeden oluşur: **Harita**, **Oturumlar**, **Terminal**, **Git** ve **Ayarlar**. 3D harita hep arka planda durur; diğer sekmeler onun üstünde cam görünümlü paneller olarak açılır.
+Arayüz beş sekmeden oluşur: **Harita**, **Oturumlar**, **Terminal**, **Git** ve **Ayarlar**. Arayüz bir kod editörü gibi sade tutuldu: her yerde JetBrains Mono, düz paneller; Oturumlar sekmesi `htop` benzeri bir tablodur.
 
 - **Yörünge haritası:** Ortadaki güneş sizsiniz, her oturum bir gezegen.
   - Turuncu: çalışıyor (arkasında kuyruk izi bırakır).
