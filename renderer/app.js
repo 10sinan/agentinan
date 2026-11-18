@@ -1,14 +1,20 @@
 'use strict';
-// Header, side list and settings. The 3D map lives in orbit3d.js and talks to this file through window.dash.
+// Tabs, top bar, the sessions grid, the map's info card and settings.
+// The 3D map (orbit3d.js) and the terminal view (console.js) talk to this file through window.dash.
 
 const api = window.agentinan;
-const COLORS = { busy: '#f5a524', waiting: '#ff4d6d', idle: '#4cc9f0' };
+const COLORS = { busy: '#f6b860', waiting: '#ff6f86', idle: '#6cc8e6' };
 const LABELS = { busy: 'Çalışıyor', waiting: 'Seni bekliyor', idle: 'Boşta' };
+const TITLES = { map: 'Harita', sessions: 'Oturumlar', terminal: 'Terminal', settings: 'Ayarlar' };
 
 let snap = { sessions: [], today: { tokens: 0, cost: 0, byModel: {} } };
 let selected = null;
+let tab = 'map';
+let filter = 'all';
+let settings = { notifyWaiting: true, notifyDone: true, quality: 'high' };
 
 // ---------- helpers ----------
+const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 function fmtTok(n) {
@@ -41,94 +47,201 @@ function toast(text) {
   t.textContent = text;
   t.classList.add('show');
   clearTimeout(t._h);
-  t._h = setTimeout(() => t.classList.remove('show'), 1600);
+  t._h = setTimeout(() => t.classList.remove('show'), 1700);
 }
 
-// ---------- header ----------
+const statusPill = (s) =>
+  `<span class="pill ${s.status}"><i class="sdot ${s.status}"></i>${LABELS[s.status] || esc(s.status)}</span>`;
+
+const controlPill = (s) =>
+  s.control
+    ? `<span class="pill ctl">${icon('terminal')}Komut verilebilir</span>`
+    : `<span class="pill" title="Komut vermek için oturumu Agentinan'dan başlat">${icon('eye')}Sadece izleme</span>`;
+
+// ---------- tabs ----------
+function setTab(name) {
+  if (!TITLES[name]) return;
+  tab = name;
+  document.body.dataset.tab = name;
+  for (const b of document.querySelectorAll('.tab')) b.classList.toggle('active', b.dataset.tab === name);
+  $('viewTitle').textContent = TITLES[name];
+  renderSub();
+  try {
+    localStorage.setItem('tab', name);
+  } catch {}
+  window.dispatchEvent(new CustomEvent('dash:tab', { detail: name }));
+}
+for (const b of document.querySelectorAll('.tab')) b.addEventListener('click', () => setTab(b.dataset.tab));
+
+function renderSub() {
+  const n = snap.sessions.length;
+  const w = snap.sessions.filter((s) => s.status === 'waiting').length;
+  $('viewSub').textContent = n ? `${n} oturum${w ? ` · ${w} seni bekliyor` : ''}` : '';
+}
+
+// ---------- top bar ----------
 function renderToday() {
   const t = snap.today;
-  const models = Object.entries(t.byModel || {}).sort((a, b) => b[1].cost - a[1].cost);
-  document.getElementById('today').innerHTML =
-    `<span class="chip main" title="API liste fiyatıyla tahmini; Pro/Max aboneliğinde bu tutarı ödemezsin">Bugün <b>${fmtTok(t.tokens)}</b> token · <b>${fmtCost(t.cost)}</b></span>` +
-    models.map(([m, v]) => `<span class="chip">${esc(m)} <b>${fmtTok(v.tokens)}</b> · ${fmtCost(v.cost)}</span>`).join('');
+  const models = Object.entries(t.byModel || {})
+    .filter(([, v]) => v.tokens > 0)
+    .sort((a, b) => b[1].cost - a[1].cost);
+  $('today').innerHTML =
+    `<span class="stat-chip lead" title="API liste fiyatıyla tahmini; Pro/Max aboneliğinde bu tutarı ödemezsin">Bugün <b>${fmtTok(t.tokens)}</b> token <b class="cost">${fmtCost(t.cost)}</b></span>` +
+    models.map(([m, v]) => `<span class="stat-chip">${esc(m)} <b>${fmtTok(v.tokens)}</b> ${fmtCost(v.cost)}</span>`).join('');
 }
 
-// ---------- side list ----------
-const list = document.getElementById('list');
+function renderBadges() {
+  const waiting = snap.sessions.filter((s) => s.status === 'waiting');
+  const set = (el, n) => {
+    el.hidden = !n;
+    el.textContent = n;
+  };
+  set($('badgeSessions'), waiting.length);
+  set($('badgeTerminal'), waiting.filter((s) => s.control).length);
+}
+
+// ---------- sessions grid ----------
+const FILTERS = [
+  ['all', 'Tümü', () => true],
+  ['busy', 'Çalışan', (s) => s.status === 'busy'],
+  ['waiting', 'Bekleyen', (s) => s.status === 'waiting'],
+  ['control', 'Komut verilebilir', (s) => !!s.control],
+];
+
+function renderFilters() {
+  $('filters').innerHTML = FILTERS.map(([key, label, fn]) => {
+    const n = snap.sessions.filter(fn).length;
+    return `<button class="filter${filter === key ? ' active' : ''}" data-f="${key}">${label}<em>${n}</em></button>`;
+  }).join('');
+}
+$('filters').addEventListener('click', (e) => {
+  const b = e.target.closest('.filter');
+  if (!b) return;
+  filter = b.dataset.f;
+  renderFilters();
+  renderGrid();
+});
 
 function card(s) {
   const now = Date.now();
   const tools = s.recentTools
-    .slice(-5)
+    .slice(-4)
     .reverse()
-    .map((t) => `<span class="tool${now - t.ts < 8000 && s.status === 'busy' ? ' live' : ''}"><b>${esc(t.name)}</b>${t.brief ? ' ' + esc(t.brief) : ''}</span>`)
+    .map((t) => `<span class="chip${now - t.ts < 8000 && s.status === 'busy' ? ' live' : ''}"><b>${esc(t.name)}</b>${t.brief ? ' ' + esc(t.brief) : ''}</span>`)
     .join('');
-  const activeAgents = s.subagents.filter((a) => a.active);
+  const agents = s.subagents.filter((a) => a.active).length;
   const pct = Math.min(100, (s.context / ctxLimit(s)) * 100);
   const waiting = s.status === 'waiting' && s.waitingFor ? ` · ${esc(s.waitingFor)}` : '';
   return `
   <div class="card ${s.status}${s.id === selected ? ' sel' : ''}" data-id="${esc(s.id)}">
-    <div class="row"><span class="name">${s.control ? '›_ ' : ''}${esc(s.name)}</span><span class="badge">${LABELS[s.status] || esc(s.status)}</span></div>
-    <div class="sub">${esc(s.project)} · ${esc(s.model || 'model yok')} · ${ago(s.statusSince)}${waiting}</div>
-    <div class="tags">${
-      s.control
-        ? '<span class="tag ctl">Komut verilebilir · seçince terminal açılır</span>'
-        : `<span class="tag" title="Komut vermek için oturumu Agentinan'dan başlat">Sadece izleme${s.entrypoint.includes('vscode') ? ' · VS Code' : ''}</span>`
-    }</div>
-    ${s.lastPrompt ? `<div class="prompt">${esc(s.lastPrompt)}</div>` : ''}
-    ${tools ? `<div class="tools">${tools}</div>` : ''}
-    <div class="stats">
-      <div class="stat"><div class="k">Token</div><div class="v">${fmtTok(s.tokens.total)}</div></div>
-      <div class="stat"><div class="k">Maliyet*</div><div class="v">${fmtCost(s.cost)}</div></div>
-      <div class="stat"><div class="k">Araç</div><div class="v">${s.toolCount}</div></div>
-      <div class="stat"><div class="k">Alt ajan</div><div class="v">${activeAgents.length}/${s.subagents.length}</div></div>
+    <div class="c-top"><span class="c-name">${esc(s.name)}</span>${statusPill(s)}</div>
+    <div class="c-meta">${controlPill(s)}<span>${esc(s.project)} · ${esc(s.model || 'model yok')} · ${ago(s.statusSince)}${waiting}</span></div>
+    ${s.lastPrompt ? `<div class="c-prompt">${esc(s.lastPrompt)}</div>` : ''}
+    ${s.lastText ? `<div class="c-reply">${esc(s.lastText)}</div>` : ''}
+    ${tools ? `<div class="c-tools">${tools}</div>` : ''}
+    <div class="c-stats">
+      <div><span>Token</span><b>${fmtTok(s.tokens.total)}</b></div>
+      <div><span>Maliyet*</span><b>${fmtCost(s.cost)}</b></div>
+      <div><span>Araç</span><b>${s.toolCount}</b></div>
+      <div><span>Alt ajan</span><b>${agents}/${s.subagents.length}</b></div>
     </div>
     <div class="ctx" title="Bağlam: ${s.context.toLocaleString('tr-TR')} / ${fmtTok(ctxLimit(s))} token"><i style="width:${pct.toFixed(1)}%"></i></div>
-    <div class="details">
-      ${s.lastText ? `<div class="reply">${esc(s.lastText)}</div>` : ''}
-      ${activeAgents.length ? `<div class="agents">Çalışan alt ajanlar: ${activeAgents.map((a) => esc(a.desc || a.type)).join(', ')}</div>` : ''}
-      <div class="sub" title="${esc(s.cwd)}">${esc(s.cwd)}</div>
-      <div class="sub">Giriş ${fmtTok(s.tokens.input)} · Çıkış ${fmtTok(s.tokens.output)} · Önbellek yazma ${fmtTok(s.tokens.cacheWrite5m + s.tokens.cacheWrite1h)} · okuma ${fmtTok(s.tokens.cacheRead)}</div>
-      <div class="sub">PID ${s.pid} · ${esc(s.entrypoint)} · v${esc(s.version)} · ${s.fileCount} dosya</div>
-      <div class="actions" style="margin-top:8px">
-        <button data-act="open">Klasörü aç</button>
-        <button data-act="resume">Devam komutunu kopyala</button>
-      </div>
+    <div class="c-actions">
+      <button class="btn sm" data-act="map">${icon('target')}Haritada</button>
+      ${s.control ? `<button class="btn sm" data-act="term">${icon('terminal')}Terminal</button>` : ''}
+      <button class="btn sm ghost" data-act="open" title="Klasörü aç">${icon('folder')}</button>
+      <button class="btn sm ghost" data-act="resume" title="claude --resume komutunu kopyala">${icon('copy')}</button>
     </div>
   </div>`;
 }
 
-function renderList() {
-  if (!snap.sessions.length) {
-    list.innerHTML = `<div class="empty">Şu an çalışan Claude Code oturumu yok.<br>Bir terminalde <code>claude</code> başlattığında burada belirir.<br><span style="font-size:11px">${esc(snap.claudeDir || '')} izleniyor</span></div>`;
-    return;
-  }
-  const scroll = list.scrollTop;
-  list.innerHTML = snap.sessions.map(card).join('') + `<div class="sub" style="text-align:center">* API liste fiyatıyla tahmini</div>`;
-  list.scrollTop = scroll;
+function renderGrid() {
+  const grid = $('grid');
+  const fn = FILTERS.find((f) => f[0] === filter)[2];
+  const list = snap.sessions.filter(fn);
+  const scroll = grid.scrollTop;
+  grid.innerHTML = list.length
+    ? list.map(card).join('')
+    : `<div class="grid-empty">${snap.sessions.length ? 'Bu filtreye uyan oturum yok.' : 'Şu an çalışan Claude Code oturumu yok.'}</div>`;
+  grid.scrollTop = scroll;
 }
 
-list.addEventListener('click', (e) => {
+$('grid').addEventListener('click', (e) => {
   const el = e.target.closest('.card');
   if (!el) return;
   const s = snap.sessions.find((x) => x.id === el.dataset.id);
   const act = e.target.closest('button')?.dataset.act;
-  if (act === 'open' && s) return void api.openFolder(s.cwd);
-  if (act === 'resume' && s) {
+  if (!s) return;
+  if (act === 'open') return void api.openFolder(s.cwd);
+  if (act === 'resume') {
     api.copy(`cd ${JSON.stringify(s.cwd)} && claude --resume ${s.id}`);
-    return toast('Komut kopyalandı');
+    return toast('Devam komutu kopyalandı');
   }
-  select(selected === el.dataset.id ? null : el.dataset.id);
+  select(s.id);
+  if (act === 'map') setTab('map');
+  if (act === 'term') setTab('terminal');
 });
 
-function select(id, scroll) {
+// ---------- map info card ----------
+function renderMapCard() {
+  const el = $('mapCard');
+  const s = snap.sessions.find((x) => x.id === selected);
+  if (!s) {
+    el.hidden = true;
+    return;
+  }
+  el.hidden = false;
+  el.innerHTML = `
+    <div class="mc-top"><i class="sdot ${s.status}"></i><span class="mc-name">${esc(s.name)}</span>${statusPill(s)}</div>
+    <div class="mc-meta">${esc(s.project)} · ${esc(s.model || 'model yok')} · ${ago(s.statusSince)}${s.waitingFor && s.status === 'waiting' ? ' · ' + esc(s.waitingFor) : ''}</div>
+    ${s.lastPrompt ? `<div class="mc-prompt">› ${esc(s.lastPrompt)}</div>` : ''}
+    <div class="mc-stats">
+      <div><span>Token</span><b>${fmtTok(s.tokens.total)}</b></div>
+      <div><span>Maliyet*</span><b>${fmtCost(s.cost)}</b></div>
+      <div><span>Araç</span><b>${s.toolCount}</b></div>
+    </div>
+    <div class="mc-actions">
+      ${s.control ? `<button class="btn primary sm" data-act="term">${icon('terminal')}Terminali aç</button>` : `<span class="pill">${icon('eye')}Sadece izleme</span>`}
+      <button class="btn sm" data-act="details">Ayrıntılar</button>
+      <button class="btn sm ghost" data-act="close" title="Seçimi kaldır">${icon('x')}</button>
+    </div>`;
+}
+$('mapCard').addEventListener('click', (e) => {
+  const act = e.target.closest('button')?.dataset.act;
+  if (act === 'term') setTab('terminal');
+  if (act === 'details') setTab('sessions');
+  if (act === 'close') select(null);
+});
+
+// ---------- selection ----------
+function select(id, reveal) {
   selected = id;
-  renderList();
+  renderGrid();
+  renderMapCard();
   window.dispatchEvent(new CustomEvent('dash:select', { detail: id }));
-  if (id && scroll) list.querySelector(`.card[data-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  if (id && reveal) $('grid').querySelector(`.card[data-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
-// ---------- shared with orbit3d.js ----------
+// ---------- settings ----------
+function applySettings() {
+  $('nWaiting').checked = settings.notifyWaiting;
+  $('nDone').checked = settings.notifyDone;
+  for (const b of document.querySelectorAll('#quality button')) b.classList.toggle('active', b.dataset.q === settings.quality);
+  document.body.classList.toggle('low', settings.quality === 'low');
+  window.dispatchEvent(new CustomEvent('dash:settings', { detail: settings }));
+}
+async function saveSettings(patch) {
+  settings = await api.setSettings(patch);
+  applySettings();
+}
+$('nWaiting').onchange = () => saveSettings({ notifyWaiting: $('nWaiting').checked });
+$('nDone').onchange = () => saveSettings({ notifyDone: $('nDone').checked });
+$('quality').addEventListener('click', (e) => {
+  const q = e.target.closest('button')?.dataset.q;
+  if (q) saveSettings({ quality: q });
+});
+
+// ---------- shared with orbit3d.js and console.js ----------
 window.dash = {
   COLORS,
   LABELS,
@@ -136,9 +249,13 @@ window.dash = {
   fmtTok,
   fmtCost,
   ago,
+  toast,
   snap: () => snap,
   selected: () => selected,
   select,
+  tab: () => tab,
+  setTab,
+  settings: () => settings,
 };
 
 // ---------- wiring ----------
@@ -146,17 +263,27 @@ api.onSnapshot((s) => {
   snap = s;
   if (selected && !s.sessions.some((x) => x.id === selected)) selected = null;
   renderToday();
-  renderList();
+  renderSub();
+  renderBadges();
+  renderFilters();
+  renderGrid();
+  renderMapCard();
+  $('claudeDir').textContent = s.claudeDir || '—';
   window.dispatchEvent(new CustomEvent('dash:snapshot', { detail: s }));
 });
-api.onSelect((id) => select(id, true));
+api.onSelect((id) => {
+  select(id, true);
+  const s = snap.sessions.find((x) => x.id === id);
+  setTab(s && s.control ? 'terminal' : 'map');
+});
 
 (async () => {
-  const st = await api.getSettings();
-  const w = document.getElementById('nWaiting');
-  const d = document.getElementById('nDone');
-  w.checked = st.notifyWaiting;
-  d.checked = st.notifyDone;
-  w.onchange = () => api.setSettings({ notifyWaiting: w.checked });
-  d.onchange = () => api.setSettings({ notifyDone: d.checked });
+  settings = { ...settings, ...(await api.getSettings()) };
+  applySettings();
 })();
+
+let startTab = 'map';
+try {
+  startTab = localStorage.getItem('tab') || 'map';
+} catch {}
+setTab(startTab);

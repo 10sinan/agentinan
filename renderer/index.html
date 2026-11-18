@@ -4,77 +4,146 @@
     <meta charset="utf-8" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'sha256-QHspYcLLOKSarKa9WCONpLgp80qJjPebMyusqjGSeoo='" />
     <title>Agentinan</title>
+    <link rel="stylesheet" href="../node_modules/@fontsource-variable/inter/index.css" />
+    <link rel="stylesheet" href="../node_modules/@fontsource/jetbrains-mono/400.css" />
+    <link rel="stylesheet" href="../node_modules/@fontsource/jetbrains-mono/700.css" />
     <link rel="stylesheet" href="../node_modules/@xterm/xterm/css/xterm.css" />
     <link rel="stylesheet" href="style.css" />
     <script type="importmap">{"imports":{"three":"../node_modules/three/build/three.module.js","three/addons/":"../node_modules/three/examples/jsm/"}}</script>
   </head>
-  <body>
-    <header>
-      <div class="brand"><span class="logo"></span>Agentinan</div>
-      <button class="primary" id="newBtn" title="Agentinan'dan başlatılan oturumlara komut verebilirsin">+ Yeni oturum</button>
-      <div class="today" id="today"></div>
-      <div class="toggles">
-        <label title="Bir oturum onay ya da cevap beklediğinde"><input type="checkbox" id="nWaiting" /> Bekleyince bildir</label>
-        <label title="Bir oturum işini bitirdiğinde (pencere öndeyken gelmez)"><input type="checkbox" id="nDone" /> Bitince bildir</label>
-      </div>
-    </header>
-    <main>
-      <section class="map">
-        <div class="stage">
-          <div id="scene"></div>
-          <div class="empty3d" id="empty3d" hidden>Yörüngede oturum yok · <b>+ Yeni oturum</b> ile başlat</div>
-          <div class="legend">
-            <span><i class="dot busy"></i>Çalışıyor</span>
-            <span><i class="dot waiting"></i>Seni bekliyor</span>
-            <span><i class="dot idle"></i>Boşta</span>
-            <span><i class="moon"></i>Alt ajan</span>
-            <span>›_ Komut verilebilir</span>
+  <body data-tab="map">
+    <!-- the 3D map stays behind every view; other views blur it -->
+    <div id="scene"></div>
+
+    <div class="shell">
+      <nav class="rail glass">
+        <div class="logo" title="Agentinan"></div>
+        <button class="tab" data-tab="map" title="Harita"><i data-icon="orbit"></i><span class="tab-label">Harita</span></button>
+        <button class="tab" data-tab="sessions" title="Oturumlar"><i data-icon="grid"></i><span class="tab-label">Oturumlar</span><b class="tbadge" id="badgeSessions" hidden></b></button>
+        <button class="tab" data-tab="terminal" title="Terminal"><i data-icon="terminal"></i><span class="tab-label">Terminal</span><b class="tbadge" id="badgeTerminal" hidden></b></button>
+        <div class="rail-spacer"></div>
+        <button class="tab" data-tab="settings" title="Ayarlar"><i data-icon="sliders"></i><span class="tab-label">Ayarlar</span></button>
+      </nav>
+
+      <div class="main">
+        <header class="topbar glass">
+          <div class="tb-title">
+            <h1 id="viewTitle">Harita</h1>
+            <span class="tb-sub" id="viewSub"></span>
+          </div>
+          <div class="today" id="today"></div>
+          <button class="btn primary" id="newBtn" title="Agentinan'dan başlatılan oturumlara komut verebilirsin"><i data-icon="plus"></i>Yeni oturum</button>
+        </header>
+
+        <section class="view" data-view="map">
+          <div class="map-card glass" id="mapCard" hidden></div>
+          <div class="legend glass">
+            <span><i class="sdot busy"></i>Çalışıyor</span>
+            <span><i class="sdot waiting"></i>Seni bekliyor</span>
+            <span><i class="sdot idle"></i>Boşta</span>
+            <span><i class="sdot moon"></i>Alt ajan</span>
           </div>
           <div class="hint">Sürükle: döndür · Tekerlek: yakınlaş · Gezegene tıkla: seç</div>
-          <div class="tooltip" id="tip" hidden></div>
-        </div>
-        <div id="console" hidden>
-          <div class="con-head">
-            <span class="con-title" id="conTitle"></span>
-            <span class="con-note" id="conNote"></span>
-            <span class="spacer"></span>
-            <button id="conApprove" title="Claude'un sorduğu onayı verir (Enter)">✓ Onayla</button>
-            <button id="conReject" title="Soruyu reddeder ya da Claude'u durdurur (Esc)">✕ Reddet / Durdur</button>
-            <button id="conStop" class="danger" title="Oturumu tamamen kapatır">Oturumu kapat</button>
-            <button id="conHide" class="ghost" title="Paneli gizle">▾</button>
+          <div class="empty-map" id="empty3d" hidden>
+            <p>Yörüngede oturum yok</p>
+            <span>VS Code'da Claude'u aç ya da buradan <b>Yeni oturum</b> başlat.</span>
           </div>
-          <div class="term"></div>
-          <form class="con-input" id="conForm">
-            <input id="conText" autocomplete="off" placeholder="Claude'a yaz ve Enter'a bas…" />
-            <button type="submit" class="primary">Gönder</button>
-          </form>
-        </div>
-      </section>
-      <aside id="list"></aside>
-    </main>
+          <div class="tooltip glass" id="tip" hidden></div>
+        </section>
+
+        <section class="view" data-view="sessions">
+          <div class="panel glass-panel">
+            <div class="panel-head">
+              <div class="filters" id="filters"></div>
+            </div>
+            <div class="grid" id="grid"></div>
+          </div>
+        </section>
+
+        <section class="view" data-view="terminal">
+          <div class="panel glass-panel term-panel">
+            <aside class="tlist" id="tlist"></aside>
+            <div class="tmain" id="tmain">
+              <div class="con-head">
+                <div class="con-title" id="conTitle"></div>
+                <span class="spacer"></span>
+                <button class="btn" id="conApprove" title="Claude'un sorduğu onayı verir (Enter)"><i data-icon="check"></i>Onayla</button>
+                <button class="btn" id="conReject" title="Soruyu reddeder ya da Claude'u durdurur (Esc)"><i data-icon="x"></i>Reddet / Durdur</button>
+                <button class="btn danger" id="conStop" title="Oturumu tamamen kapatır"><i data-icon="power"></i><span>Oturumu kapat</span></button>
+              </div>
+              <div class="con-note" id="conNote"></div>
+              <div class="term"></div>
+              <form class="con-input" id="conForm">
+                <input id="conText" autocomplete="off" placeholder="Claude'a yaz ve Enter'a bas…" />
+                <button type="submit" class="btn primary icon-only" title="Gönder"><i data-icon="send"></i></button>
+              </form>
+            </div>
+            <div class="tempty" id="tempty" hidden>
+              <div class="tempty-icon"><i data-icon="terminal"></i></div>
+              <h2>Komut verebileceğin oturum yok</h2>
+              <p>Komut vermek için oturumu Agentinan'dan başlatman gerekiyor. VS Code'da açtığın oturumlar sadece izlenebilir.</p>
+              <button class="btn primary" id="temptyNew"><i data-icon="plus"></i>Yeni oturum başlat</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" data-view="settings">
+          <div class="panel glass-panel settings">
+            <div class="set-group">
+              <h3><i data-icon="bell"></i>Bildirimler</h3>
+              <label class="set-row">
+                <div><b>Seni beklediğinde bildir</b><span>Bir oturum onay ya da cevap beklediğinde</span></div>
+                <input type="checkbox" class="switch" id="nWaiting" />
+              </label>
+              <label class="set-row">
+                <div><b>Bitirdiğinde bildir</b><span>Bir oturum işini bitirdiğinde (pencere öndeyken gelmez)</span></div>
+                <input type="checkbox" class="switch" id="nDone" />
+              </label>
+            </div>
+            <div class="set-group">
+              <h3><i data-icon="zap"></i>Görüntü</h3>
+              <div class="set-row">
+                <div><b>Harita kalitesi</b><span>Bilgisayar ısınırsa ya da fan çalışırsa “Düşük”e al</span></div>
+                <div class="seg" id="quality">
+                  <button data-q="high">Yüksek</button>
+                  <button data-q="low">Düşük</button>
+                </div>
+              </div>
+            </div>
+            <div class="set-group">
+              <h3><i data-icon="info"></i>Hakkında</h3>
+              <div class="set-row"><div><b>İzlenen klasör</b><span id="claudeDir">—</span></div></div>
+              <div class="set-row"><div><b>Maliyet</b><span>API liste fiyatlarıyla tahmindir; Pro ve Max aboneliğinde bu tutarı ödemezsin.</span></div></div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
 
     <div class="modal" id="newModal" hidden>
-      <form class="modal-box" id="newForm">
+      <form class="modal-box glass" id="newForm">
         <h2>Yeni Claude oturumu</h2>
+        <p class="modal-sub">Bu oturum arka planda çalışır; Agentinan'ı kapatsan da devam eder ve ona buradan komut verebilirsin.</p>
         <label>Klasör</label>
-        <div class="row">
+        <div class="field-row">
           <input id="newCwd" readonly placeholder="Claude'un çalışacağı proje klasörü" />
-          <button type="button" id="newPick">Seç…</button>
+          <button type="button" class="btn" id="newPick"><i data-icon="folder"></i>Seç</button>
         </div>
-        <label>İsim <span class="opt">(isteğe bağlı)</span></label>
+        <label>İsim <span class="opt">isteğe bağlı</span></label>
         <input id="newName" maxlength="60" placeholder="örn. web-sitesi" />
-        <label>İlk komut <span class="opt">(isteğe bağlı)</span></label>
+        <label>İlk komut <span class="opt">isteğe bağlı · Ctrl+Enter ile başlat</span></label>
         <textarea id="newPrompt" rows="3" placeholder="örn. bu projedeki testleri çalıştır ve hataları düzelt"></textarea>
         <div class="modal-err" id="newErr"></div>
         <div class="modal-actions">
-          <button type="button" class="ghost" id="newCancel">İptal</button>
-          <button type="submit" class="primary" id="newGo">Başlat</button>
+          <button type="button" class="btn ghost" id="newCancel">İptal</button>
+          <button type="submit" class="btn primary" id="newGo">Başlat</button>
         </div>
       </form>
     </div>
 
     <script src="../node_modules/@xterm/xterm/lib/xterm.js"></script>
     <script src="../node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
+    <script src="icons.js"></script>
     <script src="app.js"></script>
     <script src="console.js"></script>
     <script type="module" src="orbit3d.js"></script>

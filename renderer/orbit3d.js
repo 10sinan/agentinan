@@ -23,8 +23,8 @@ labels.domElement.className = 'labels';
 host.appendChild(labels.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color('#05070f');
-scene.fog = new THREE.FogExp2('#05070f', 0.0011);
+scene.background = new THREE.Color('#05060b');
+scene.fog = new THREE.FogExp2('#05060b', 0.0011);
 
 const camera = new THREE.PerspectiveCamera(45, 1, 1, 6000);
 camera.position.set(0, 470, 560);
@@ -312,7 +312,7 @@ function layout(sessions) {
     p.status = s.status;
     const waiting = s.status === 'waiting' && s.waitingFor ? ` · ${D.esc(s.waitingFor)}` : '';
     p.el.className = `planet-label ${s.status}${s.id === D.selected() ? ' sel' : ''}`;
-    p.el.innerHTML = `<b>${s.control ? '›_ ' : ''}${D.esc(s.name)}</b><span>${D.LABELS[s.status] || D.esc(s.status)}${waiting} · ${D.fmtTok(s.tokens.total)}</span>`;
+    p.el.innerHTML = `<b>${s.control ? '<i class="ctl">›_</i>' : ''}${D.esc(s.name)}</b><span>${D.LABELS[s.status] || D.esc(s.status)}${waiting} · ${D.fmtTok(s.tokens.total)}</span>`;
     syncMoons(p, s.subagents.filter((a) => a.active).length);
   });
   const live = new Set(sessions.map((s) => s.id));
@@ -387,7 +387,7 @@ labels.domElement.addEventListener('pointermove', (e) => {
   labels.domElement.style.cursor = hoverId ? 'pointer' : 'grab';
   const s = hoverId && D.snap().sessions.find((v) => v.id === hoverId);
   if (!s) return void (tip.hidden = true);
-  const r = labels.domElement.getBoundingClientRect();
+  const r = tip.offsetParent.getBoundingClientRect(); // the tooltip lives in the map view, not the full-window scene
   const lt = s.recentTools[s.recentTools.length - 1];
   tip.innerHTML =
     `<b>${D.esc(s.name)}</b><br><span class="m">${D.esc(s.cwd)}</span><br>` +
@@ -418,7 +418,20 @@ const clock = new THREE.Clock();
 const tmp = new THREE.Vector3();
 const camDir = new THREE.Vector3();
 
-function animate() {
+// Full frame rate only while the map tab is open; behind other tabs the map is blurred, so a few frames are enough.
+let lastFrame = 0;
+const placed = [];
+const proj = new THREE.Vector3();
+
+function animate(now = 0) {
+  requestAnimationFrame(animate);
+  const onMap = D.tab() === 'map';
+  const low = D.settings().quality === 'low';
+  const gap = onMap ? (low ? 1000 / 30 : 0) : 1000 / (low ? 6 : 20);
+  if (now - lastFrame < gap) return;
+  lastFrame = now;
+  controls.enabled = onMap;
+
   const dt = Math.min(0.1, clock.getDelta());
   const t = clock.elapsedTime;
 
@@ -512,10 +525,44 @@ function animate() {
   sunLight.position.set(0, 0, 0);
 
   controls.update();
-  composer.render();
-  labels.render(scene, camera);
-  requestAnimationFrame(animate);
+  if (low) renderer.render(scene, camera);
+  else composer.render();
+  if (onMap) {
+    cullLabels(selected);
+    labels.render(scene, camera);
+  }
 }
+
+// Hides a planet's label when it would cover a nearer one (the selected and hovered planets always keep theirs).
+function cullLabels(selected) {
+  const w = host.clientWidth;
+  const h = host.clientHeight;
+  placed.length = 0;
+  proj.set(0, 0, 0).project(camera);
+  placed.push({ x: ((proj.x + 1) / 2) * w, y: ((1 - proj.y) / 2) * h + 40 }); // the sun's caption
+  const order = [...planets.values()]
+    .map((p) => {
+      proj.copy(p.group.position).project(camera);
+      return { p, x: ((proj.x + 1) / 2) * w, y: ((1 - proj.y) / 2) * h, z: proj.z };
+    })
+    .sort((a, b) => {
+      const pa = a.p.id === selected || a.p.id === hoverId;
+      const pb = b.p.id === selected || b.p.id === hoverId;
+      return pb - pa || a.z - b.z;
+    });
+  for (const o of order) {
+    const keep = o.p.id === selected || o.p.id === hoverId;
+    const hit = placed.some((q) => Math.abs(q.x - o.x) < 150 && Math.abs(q.y - o.y) < 40);
+    o.p.el.classList.toggle('faded', hit && !keep);
+    if (!hit || keep) placed.push(o);
+  }
+}
+
+window.addEventListener('dash:settings', () => {
+  const low = D.settings().quality === 'low';
+  renderer.setPixelRatio(low ? 1 : Math.min(2, window.devicePixelRatio || 1));
+  resize();
+});
 
 window.addEventListener('dash:snapshot', (e) => {
   layout(e.detail.sessions);
@@ -523,4 +570,4 @@ window.addEventListener('dash:snapshot', (e) => {
 });
 layout(D.snap().sessions);
 resize();
-animate();
+requestAnimationFrame(animate);

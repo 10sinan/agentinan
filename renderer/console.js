@@ -1,40 +1,38 @@
 'use strict';
-// The command panel under the map: the selected session's terminal (xterm.js) and a box to type to Claude,
-// plus the "new session" dialog. Only sessions Agentinan started (s.control set) get a panel.
+// The Terminal tab: a list of the sessions Agentinan can drive (s.control set), the chosen one's terminal
+// (xterm.js) and a box to type to Claude; plus the "new session" dialog.
 (() => {
   const api = window.agentinan;
   const D = window.dash;
-  const box = document.getElementById('console');
-  const termHost = box.querySelector('.term');
-  const title = document.getElementById('conTitle');
-  const note = document.getElementById('conNote');
-  const text = document.getElementById('conText');
+  const $ = (id) => document.getElementById(id);
+  const termHost = document.querySelector('.term');
+  const text = $('conText');
 
   const terms = new Map(); // control key → { term, fit, el, ready, dead }
   let current = null;
   let pendingKey = null; // a session we just started that isn't in the snapshot yet
-  let hidden = false;
 
   const THEME = {
-    background: '#0a0f1e',
-    foreground: '#e6ebf7',
-    cursor: '#f5a524',
-    selectionBackground: '#3b4a7a',
-    black: '#1b2236',
-    brightBlack: '#5d6888',
-    red: '#ff4d6d',
-    brightRed: '#ff7a93',
-    green: '#4ade80',
-    brightGreen: '#86efac',
-    yellow: '#f5a524',
-    brightYellow: '#fcd34d',
-    blue: '#60a5fa',
-    brightBlue: '#93c5fd',
-    magenta: '#a78bfa',
-    brightMagenta: '#c4b5fd',
-    cyan: '#4cc9f0',
-    brightCyan: '#a5f3fc',
-    white: '#d9def0',
+    background: '#00000000',
+    foreground: '#e9ecf5',
+    cursor: '#8b95ff',
+    cursorAccent: '#05060b',
+    selectionBackground: '#8b95ff55',
+    black: '#1b1f2e',
+    brightBlack: '#5b6382',
+    red: '#ff6f86',
+    brightRed: '#ff95a6',
+    green: '#6fdc9a',
+    brightGreen: '#9cf0bd',
+    yellow: '#f6b860',
+    brightYellow: '#ffd38f',
+    blue: '#7aa7ff',
+    brightBlue: '#a6c4ff',
+    magenta: '#b4a2ff',
+    brightMagenta: '#cfc3ff',
+    cyan: '#6cc8e6',
+    brightCyan: '#a6e4f5',
+    white: '#d9deec',
     brightWhite: '#ffffff',
   };
 
@@ -49,10 +47,12 @@
     el.className = 'term-inst';
     termHost.appendChild(el);
     const term = new Terminal({
-      fontFamily: "'JetBrains Mono', 'Fira Code', 'Source Code Pro', 'DejaVu Sans Mono', monospace",
+      fontFamily: "'JetBrains Mono', 'Fira Code', 'DejaVu Sans Mono', monospace",
       fontSize: 13,
+      lineHeight: 1.15,
       cursorBlink: true,
       scrollback: 5000,
+      allowTransparency: true,
       theme: THEME,
     });
     const fit = new FitAddon.FitAddon();
@@ -67,7 +67,7 @@
         t.dead = true;
         return;
       }
-      // The buffer already holds everything sent before this reply, so anything queued meanwhile is dropped.
+      // The buffer already holds everything sent before this reply, so nothing that arrived meanwhile is lost.
       term.write(r.buffer);
       t.ready = true;
       fitNow();
@@ -79,7 +79,6 @@
     const t = terms.get(key);
     if (t && t.ready) t.term.write(data);
   });
-
   api.onTermExit(({ key }) => {
     const t = terms.get(key);
     if (!t) return;
@@ -89,7 +88,7 @@
 
   function fitNow() {
     const t = current && terms.get(current);
-    if (!t || box.hidden) return;
+    if (!t || D.tab() !== 'terminal') return;
     try {
       t.fit.fit();
     } catch {}
@@ -97,26 +96,31 @@
   }
   new ResizeObserver(() => requestAnimationFrame(fitNow)).observe(termHost);
 
-  function show(key, s) {
-    if (!key || hidden) {
-      box.hidden = true;
-      current = key;
-      return;
-    }
-    const changed = key !== current;
-    current = key;
-    box.hidden = false;
-    const t = ensure(key);
-    for (const x of terms.values()) x.el.style.display = x === t ? 'block' : 'none';
-    const status = s ? D.LABELS[s.status] || s.status : 'Başlıyor…';
-    title.innerHTML = `›_ <b>${D.esc(s ? s.name : 'Yeni oturum')}</b> <span class="st ${s ? s.status : ''}">${D.esc(status)}</span>`;
-    note.textContent = key.startsWith('own:')
-      ? 'Bu klasör ilk kez açılıyor: güven sorusunu terminalde cevapla. Agentinan kapanınca bu oturum da kapanır.'
-      : 'Agentinan kapansa da arka planda çalışmaya devam eder.';
-    if (changed) {
-      requestAnimationFrame(fitNow);
-      text.focus();
-    }
+  const controllable = () => D.snap().sessions.filter((s) => s.control);
+
+  // Which terminal to show: the selected session if it's controllable, else the one already shown, else the first.
+  function pick() {
+    const list = controllable();
+    const sel = list.find((s) => s.id === D.selected());
+    if (sel) return sel.control;
+    if (current && (list.some((s) => s.control === current) || current === pendingKey)) return current;
+    return list[0]?.control || pendingKey || null;
+  }
+
+  function renderList(list) {
+    const items = list
+      .map(
+        (s) => `<div class="titem${s.control === current ? ' active' : ''}" data-id="${D.esc(s.id)}">
+          <i class="sdot ${s.status}"></i>
+          <div class="tn"><b>${D.esc(s.name)}</b><span>${D.LABELS[s.status] || D.esc(s.status)} · ${D.esc(s.project)}</span></div>
+        </div>`,
+      )
+      .join('');
+    const pending =
+      pendingKey && !list.some((s) => s.control === pendingKey)
+        ? `<div class="titem${current === pendingKey ? ' active' : ''}"><i class="sdot busy"></i><div class="tn"><b>Yeni oturum</b><span>Başlıyor…</span></div></div>`
+        : '';
+    $('tlist').innerHTML = `<h4>Komut verilebilen</h4>${items}${pending}<button class="btn sm" id="tlistNew">${icon('plus')}Yeni oturum</button>`;
   }
 
   function update() {
@@ -125,23 +129,55 @@
       const s = snap.sessions.find((x) => x.control === pendingKey);
       if (s) {
         pendingKey = null;
-        hidden = false;
-        D.select(s.id, true);
-        return; // select() calls update again
+        D.select(s.id); // fires dash:select → update
+        return;
       }
     }
-    const s = snap.sessions.find((x) => x.id === D.selected());
-    show((s && s.control) || pendingKey, s);
+    const list = controllable();
+    const key = pick();
+    const changed = key !== current;
+    current = key;
+    renderList(list);
+    $('tempty').hidden = !!key;
+    $('tmain').hidden = !key;
+    if (!key) return;
+
+    const t = ensure(key);
+    for (const x of terms.values()) x.el.style.display = x === t ? 'block' : 'none';
+    const s = list.find((x) => x.control === key);
+    $('conTitle').innerHTML = s
+      ? `<i class="sdot ${s.status}"></i><b>${D.esc(s.name)}</b><span class="pill ${s.status}">${D.LABELS[s.status] || D.esc(s.status)}${
+          s.status === 'waiting' && s.waitingFor ? ' · ' + D.esc(s.waitingFor) : ''
+        }</span>`
+      : `<i class="sdot busy"></i><b>Yeni oturum</b><span class="pill busy">Başlıyor…</span>`;
+    $('conNote').textContent = key.startsWith('own:')
+      ? 'Bu klasör ilk kez açılıyor: Claude\'un güven sorusunu terminalde cevapla. Agentinan kapanınca bu oturum da kapanır.'
+      : `${s ? s.cwd + ' · ' : ''}Agentinan'ı kapatsan da arka planda çalışmaya devam eder.`;
+    if (changed) {
+      requestAnimationFrame(fitNow);
+      if (D.tab() === 'terminal') text.focus();
+    }
   }
 
-  window.addEventListener('dash:select', () => {
-    hidden = false;
-    update();
-  });
+  window.addEventListener('dash:select', update);
   window.addEventListener('dash:snapshot', update);
+  window.addEventListener('dash:tab', (e) => {
+    if (e.detail !== 'terminal') return;
+    update();
+    requestAnimationFrame(() => {
+      fitNow();
+      if (current) text.focus();
+    });
+  });
+
+  $('tlist').addEventListener('click', (e) => {
+    if (e.target.closest('#tlistNew')) return openModal();
+    const it = e.target.closest('.titem[data-id]');
+    if (it) D.select(it.dataset.id);
+  });
 
   // ---------- command box and buttons ----------
-  document.getElementById('conForm').addEventListener('submit', (e) => {
+  $('conForm').addEventListener('submit', (e) => {
     e.preventDefault();
     const v = text.value;
     if (!current || !v.trim()) return;
@@ -151,38 +187,36 @@
   text.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && current) api.input(current, '\x1b');
   });
-  document.getElementById('conApprove').onclick = () => current && api.input(current, '\r');
-  document.getElementById('conReject').onclick = () => current && api.input(current, '\x1b');
-  document.getElementById('conHide').onclick = () => {
-    hidden = true;
-    box.hidden = true;
-  };
+  $('conApprove').onclick = () => current && api.input(current, '\r');
+  $('conReject').onclick = () => current && api.input(current, '\x1b');
 
-  const stopBtn = document.getElementById('conStop');
+  const stopBtn = $('conStop');
+  const stopLabel = stopBtn.querySelector('span');
   let armed = null;
   stopBtn.onclick = () => {
     if (!current) return;
     if (!armed) {
-      stopBtn.textContent = 'Emin misin? Tekrar bas';
+      stopLabel.textContent = 'Emin misin? Tekrar bas';
       armed = setTimeout(() => {
         armed = null;
-        stopBtn.textContent = 'Oturumu kapat';
+        stopLabel.textContent = 'Oturumu kapat';
       }, 3000);
       return;
     }
     clearTimeout(armed);
     armed = null;
-    stopBtn.textContent = 'Oturumu kapat';
+    stopLabel.textContent = 'Oturumu kapat';
     api.stopSession(current);
+    D.toast('Oturum kapatılıyor');
   };
 
   // ---------- new session dialog ----------
-  const modal = document.getElementById('newModal');
-  const cwd = document.getElementById('newCwd');
-  const name = document.getElementById('newName');
-  const prompt = document.getElementById('newPrompt');
-  const err = document.getElementById('newErr');
-  const go = document.getElementById('newGo');
+  const modal = $('newModal');
+  const cwd = $('newCwd');
+  const name = $('newName');
+  const prompt = $('newPrompt');
+  const err = $('newErr');
+  const go = $('newGo');
 
   function openModal() {
     try {
@@ -194,23 +228,25 @@
     go.disabled = false;
     go.textContent = 'Başlat';
     modal.hidden = false;
-    (cwd.value ? prompt : document.getElementById('newPick')).focus();
+    (cwd.value ? prompt : $('newPick')).focus();
   }
   const closeModal = () => (modal.hidden = true);
+  window.openNewSession = openModal;
 
-  document.getElementById('newBtn').onclick = openModal;
-  document.getElementById('newCancel').onclick = closeModal;
+  $('newBtn').onclick = openModal;
+  $('temptyNew').onclick = openModal;
+  $('newCancel').onclick = closeModal;
   modal.addEventListener('click', (e) => e.target === modal && closeModal());
   document.addEventListener('keydown', (e) => e.key === 'Escape' && !modal.hidden && closeModal());
-  document.getElementById('newPick').onclick = async () => {
+  $('newPick').onclick = async () => {
     const dir = await api.pickFolder();
     if (dir) cwd.value = dir;
   };
   prompt.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) document.getElementById('newForm').requestSubmit();
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) $('newForm').requestSubmit();
   });
 
-  document.getElementById('newForm').addEventListener('submit', async (e) => {
+  $('newForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!cwd.value) {
       err.textContent = 'Önce bir klasör seç.';
@@ -231,8 +267,8 @@
     } catch {}
     closeModal();
     pendingKey = r.key;
-    hidden = false;
+    current = r.key;
     D.select(null);
-    show(r.key, null);
+    D.setTab('terminal');
   });
 })();

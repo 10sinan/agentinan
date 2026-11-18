@@ -4,6 +4,8 @@
 Bir oturum onay ya da cevap beklediğinde, ya da işini bitirdiğinde masaüstü bildirimi gönderir.
 [Orbiterm](https://github.com/atalaykarahan/orbiterm) fikrinden esinlenildi, ama kod sıfırdan yazıldı.
 
+Arayüz dört sekmeden oluşur: **Harita**, **Oturumlar**, **Terminal** ve **Ayarlar**. 3D harita hep arka planda durur; diğer sekmeler onun üstünde cam görünümlü paneller olarak açılır.
+
 - **Yörünge haritası:** Ortadaki güneş sizsiniz, her oturum bir gezegen.
   - Turuncu: çalışıyor (arkasında kuyruk izi bırakır).
   - Kırmızı ve nabız gibi atan: sizi bekliyor.
@@ -13,11 +15,11 @@ Bir oturum onay ya da cevap beklediğinde, ya da işini bitirdiğinde masaüstü
 - **Oturum listesi:** Son isteğiniz, son araç çağrıları, token, tahmini maliyet, bağlam doluluğu ve alt ajanlar.
   Bir karta tıklarsanız Claude'un son cevabı açılır. Oradan klasörü açabilir ya da `claude --resume` komutunu kopyalayabilirsiniz.
 - **Bugünün toplamı:** Kapanmış oturumlar da dahil, model bazında token ve maliyet.
-- **Komut verme:** Üst çubuktaki **+ Yeni oturum** ile bir klasörde Claude başlatırsınız. Haritada `›_` işaretli gezegene tıklayınca altta o oturumun terminali ve bir komut kutusu açılır. Oradan Claude'a yazabilir, onay sorularını **✓ Onayla** ya da **✕ Reddet / Durdur** ile cevaplayabilirsiniz.
+- **Komut verme:** Üst çubuktaki **Yeni oturum** ile bir klasörde Claude başlatırsınız. **Terminal** sekmesinde o oturumun terminali ve bir komut kutusu açılır; haritada bu oturumlar `›_` işaretiyle görünür. Oradan Claude'a yazabilir, onay sorularını **✓ Onayla** ya da **✕ Reddet / Durdur** ile cevaplayabilirsiniz.
   Bu oturumlar Claude Code'un arka plan oturumlarıdır (`claude --bg`). Agentinan kapansa da çalışmaya devam ederler ve tekrar açınca yeniden bağlanılır.
   Daha önce hiç onaylanmamış bir klasör seçerseniz Claude'un "bu klasöre güveniyor musun" sorusu terminalde çıkar. Böyle bir oturum Agentinan kapanınca kapanır.
   VS Code'da ya da başka bir terminalde açılan oturumlar sadece izlenir; onlara dışarıdan komut gönderilemez.
-- **Bildirimler:** "Bekleyince bildir" ve "Bitince bildir" ayarları üst çubukta. "Bitti" bildirimi, pencere öndeyken gönderilmez.
+- **Bildirimler:** "Seni beklediğinde bildir" ve "Bitirdiğinde bildir" ayarları **Ayarlar** sekmesinde. "Bitti" bildirimi, pencere öndeyken gönderilmez.
 
 ## Gereksinimler
 
@@ -57,7 +59,8 @@ Pro ya da Max aboneliğinde bu tutarı ödemezsiniz.
 | [src/terminals.js](src/terminals.js) | Agentinan'dan başlatılan oturumları açar, bağlanır, komut gönderir |
 | [renderer/console.js](renderer/console.js) | Terminal paneli, komut kutusu ve "Yeni oturum" penceresi |
 | [src/main.js](src/main.js) | Electron penceresi, 1,5 saniyede bir okuma, bildirimler, ayarlar |
-| [renderer/app.js](renderer/app.js) | Yörünge haritası (canvas) ve oturum listesi |
+| [renderer/app.js](renderer/app.js) | Sekmeler, oturum kartları, harita bilgi kartı ve ayarlar |
+| [renderer/orbit3d.js](renderer/orbit3d.js) | 3D yörünge haritası (three.js) |
 
 ## Lisans
 
