@@ -153,15 +153,15 @@ class Git {
     return clipDiff(await git(this.repo(r), ['show', '--no-color', '--stat', '--patch', '--format=commit %H%nYazar: %an <%ae>%nTarih: %ad%n%n%B', safeHash(hash)]));
   }
 
-  push(r) {
+  async push(r) {
     return git(this.repo(r), ['push'], { timeout: 120_000 });
   }
 
-  pull(r) {
+  async pull(r) {
     return git(this.repo(r), ['pull', '--ff-only'], { timeout: 120_000 });
   }
 
-  fetch(r) {
+  async fetch(r) {
     return git(this.repo(r), ['fetch', '--all', '--prune'], { timeout: 120_000 });
   }
 }
