@@ -5,6 +5,7 @@ const { Collector } = require('./collector');
 const { Terminals } = require('./terminals');
 const { Git } = require('./git');
 const { Monitor } = require('./monitor');
+const { Limits } = require('./limits');
 
 app.commandLine.appendSwitch('ozone-platform-hint', 'auto'); // native Wayland when available (Fedora's default session)
 
@@ -21,6 +22,7 @@ const DEFAULTS = {
   hogSecs: 15,
   hogMem: 30,
   hogIgnore: [],
+  notifyLimits: true, // when the 5-hour or weekly limit passes 80% and 95%
 };
 
 let win = null;
@@ -89,6 +91,8 @@ let lastSnap = null;
 const gitApi = new Git();
 const monitor = new Monitor();
 let hogs = [];
+let limits = null; // created once the app knows its data folder
+const limitNotified = new Map(); // window → { resetsAt, level } already announced
 
 function poll() {
   let snap;
@@ -133,6 +137,23 @@ function poll() {
     console.error('monitor failed', e);
   }
   snap.hogs = hogs;
+
+  // plan usage limits (5-hour and weekly window), with a notification at 80% and 95%
+  if (limits) {
+    snap.limits = limits.read();
+    for (const [w, label] of [['fiveHour', '5 saatlik'], ['week', 'Haftalık']]) {
+      const l = snap.limits[w];
+      if (!l) continue;
+      const level = l.pct >= 95 ? 95 : l.pct >= 80 ? 80 : 0;
+      const seen = limitNotified.get(w);
+      if (seen && seen.resetsAt !== l.resetsAt) limitNotified.delete(w); // a new window began
+      const prevLevel = limitNotified.get(w)?.level || 0;
+      if (level > prevLevel) {
+        limitNotified.set(w, { resetsAt: l.resetsAt, level });
+        if (settings.notifyLimits && lastSnap) notify(`${label} limitin %${Math.round(l.pct)} doldu`, level >= 95 ? 'Limit dolmak üzere' : 'Kullanımına dikkat', null);
+      }
+    }
+  }
   lastSnap = snap;
   if (win && !win.isDestroyed()) win.webContents.send('snapshot', snap);
 }
@@ -150,6 +171,7 @@ if (!app.requestSingleInstanceLock()) {
   app.whenReady().then(() => {
     Menu.setApplicationMenu(null);
     loadSettings();
+    limits = new Limits(app.getPath('userData'));
     ipcMain.handle('settings:get', () => settings);
     ipcMain.handle('settings:set', (_e, patch) => {
       settings = { ...settings, ...patch };
@@ -207,6 +229,8 @@ if (!app.requestSingleInstanceLock()) {
         return repo.root;
       }),
     );
+    ipcMain.handle('limits:enable', wrap(() => limits.enable()));
+    ipcMain.handle('limits:disable', wrap(() => limits.disable()));
     ipcMain.handle('git:status', wrap((r) => gitApi.status(r)));
     ipcMain.handle('git:diff', wrap((r, file, kind) => gitApi.diff(r, file, kind)));
     ipcMain.handle('git:stage', wrap((r, files) => gitApi.stage(r, files)));

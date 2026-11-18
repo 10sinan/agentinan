@@ -102,6 +102,70 @@ function renderToday() {
     models.map(([m, v]) => `<span class="stat-chip">${esc(m)} <b>${fmtTok(v.tokens)}</b> ${fmtCost(v.cost)}</span>`).join('');
 }
 
+// ---------- plan usage limits (top bar) ----------
+function until(ms) {
+  const s = Math.max(0, Math.round((ms - Date.now()) / 1000));
+  if (s < 3600) return Math.ceil(s / 60) + ' dk';
+  if (s < 86400) return Math.floor(s / 3600) + ' sa ' + (Math.floor(s / 60) % 60) + ' dk';
+  return Math.floor(s / 86400) + ' gün ' + (Math.floor(s / 3600) % 24) + ' sa';
+}
+
+function limitGauge(label, l) {
+  if (!l) return '';
+  const pct = Math.max(0, Math.min(100, l.pct));
+  const lvl = pct >= 95 ? 'crit' : pct >= 80 ? 'warn' : '';
+  const reset = l.resetsAt ? until(l.resetsAt) : '?';
+  const when = l.resetsAt ? new Date(l.resetsAt).toLocaleString('tr-TR', { weekday: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+  return `<span class="lim ${lvl}" title="${label} limit: %${pct.toFixed(1)} kullanıldı · ${when} sıfırlanır (${reset} sonra)">
+    <span class="lim-k">${label}</span><i><b style="width:${pct}%"></b></i><span class="lim-v">${Math.round(pct)}%</span><span class="lim-r">${reset}</span>
+  </span>`;
+}
+
+function renderLimits() {
+  const L = snap.limits;
+  const el = $('limits');
+  if (!L) return void (el.innerHTML = '');
+  $('limState').textContent = L.enabled
+    ? L.at
+      ? `açık · son bilgi ${ago(L.at)} önce`
+      : 'açık · henüz bilgi gelmedi (terminalde çalışan bir Claude oturumu istek yapınca gelir)'
+    : 'kapalı';
+  $('limToggle').textContent = L.enabled ? 'Kaldır' : 'Etkinleştir';
+  if (!L.enabled) {
+    el.innerHTML = `<button class="lim-enable" id="limOpen" title="5 saatlik ve haftalık plan limitlerini göster">limitleri göster</button>`;
+    return;
+  }
+  if (!L.fiveHour && !L.week) {
+    el.innerHTML = `<span class="lim-wait" title="Terminalde çalışan bir Claude Code oturumu bir istek yapınca gelir">limit bilgisi bekleniyor…</span>`;
+    return;
+  }
+  const stale = L.at && Date.now() - L.at > 30 * 60_000 ? `<span class="lim-age" title="Limitler en son ${ago(L.at)} önce güncellendi">${ago(L.at)} önce</span>` : '';
+  el.innerHTML = limitGauge('5s', L.fiveHour) + limitGauge('hafta', L.week) + stale;
+}
+
+function openLimModal() {
+  $('limErr').textContent = '';
+  $('limModal').hidden = false;
+}
+$('limits').addEventListener('click', (e) => {
+  if (e.target.closest('#limOpen')) openLimModal();
+});
+$('limCancel').onclick = () => ($('limModal').hidden = true);
+$('limGo').onclick = async () => {
+  const r = await api.enableLimits();
+  if (r && r.error) return void ($('limErr').textContent = 'Olmadı: ' + r.error);
+  $('limModal').hidden = true;
+  toast('Limit takibi açıldı');
+  api.refresh();
+};
+$('limToggle').onclick = async () => {
+  if (!snap.limits?.enabled) return openLimModal();
+  const r = await api.disableLimits();
+  toast(r && r.error ? 'Olmadı: ' + r.error : 'Limit takibi kaldırıldı');
+  api.refresh();
+};
+$('nLimits').onchange = () => saveSettings({ notifyLimits: $('nLimits').checked });
+
 function renderBadges() {
   const waiting = snap.sessions.filter((s) => s.status === 'waiting');
   const set = (el, n) => {
@@ -282,6 +346,7 @@ function applySettings() {
   } catch {}
   renderThemes();
   $('hogAlertSw').checked = settings.hogAlert;
+  $('nLimits').checked = settings.notifyLimits !== false;
   for (const seg of document.querySelectorAll('.seg[data-setting]'))
     for (const b of seg.querySelectorAll('button')) b.classList.toggle('active', Number(b.dataset.v) === settings[seg.dataset.setting]);
   const ign = settings.hogIgnore || [];
@@ -360,6 +425,7 @@ api.onSnapshot((s) => {
   snap = s;
   if (selected && !s.sessions.some((x) => x.id === selected)) selected = null;
   renderToday();
+  renderLimits();
   renderSub();
   renderBadges();
   renderFilters();

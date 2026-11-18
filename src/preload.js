@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld('agentinan', {
   onTermExit: (fn) => ipcRenderer.on('term:exit', (_e, m) => fn(m)),
 
   // processes straining the PC; resolve to { data } or { error }
+  enableLimits: () => ipcRenderer.invoke('limits:enable'),
+  disableLimits: () => ipcRenderer.invoke('limits:disable'),
   killProc: (pid, key, force) => ipcRenderer.invoke('proc:kill', pid, key, force),
   ignoreProc: (name) => ipcRenderer.invoke('proc:ignore', name),
 

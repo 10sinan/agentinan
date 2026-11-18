@@ -2403,3 +2403,80 @@ textarea:focus {
 *::after {
   font-variant-ligatures: none !important;
 }
+
+/* ---------- plan usage limits in the top bar ---------- */
+.limits {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+  font-size: 11.5px;
+}
+.lim {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.lim i {
+  width: 64px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 1px;
+  overflow: hidden;
+}
+.lim i b {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.lim-v {
+  color: var(--text);
+  font-weight: 600;
+  min-width: 3ch;
+  text-align: right;
+}
+.lim-r {
+  color: var(--text-3);
+}
+.lim.warn i b {
+  background: var(--busy);
+}
+.lim.warn .lim-v {
+  color: var(--busy);
+}
+.lim.crit i b {
+  background: var(--waiting);
+}
+.lim.crit .lim-v {
+  color: var(--waiting);
+}
+.lim-age,
+.lim-wait {
+  color: var(--text-3);
+}
+.lim-enable {
+  height: 22px;
+  padding: 0 8px;
+  border: 1px dashed var(--edge-strong);
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-3);
+  font: 11.5px var(--font);
+  cursor: pointer;
+}
+.lim-enable:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.lim-list {
+  margin: 4px 0 6px;
+  padding-left: 18px;
+  color: var(--text-2);
+  font-size: 12px;
+  line-height: 1.7;
+}
+.lim-list code {
+  color: var(--text);
+}

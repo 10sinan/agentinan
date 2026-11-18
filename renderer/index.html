@@ -32,6 +32,7 @@
             <h1 id="viewTitle">Harita</h1>
             <span class="tb-sub" id="viewSub"></span>
           </div>
+          <div class="limits" id="limits"></div>
           <div class="today" id="today"></div>
           <button class="btn primary" id="newBtn" title="Agentinan'dan başlatılan oturumlara komut verebilirsin"><i data-icon="plus"></i>Yeni oturum</button>
         </header>
@@ -136,6 +137,17 @@
               </label>
             </div>
             <div class="set-group">
+              <h3><i data-icon="zap"></i>Kullanım limitleri</h3>
+              <div class="set-row">
+                <div><b>Plan limitlerini üst çubukta göster</b><span id="limState">—</span></div>
+                <button class="btn sm" id="limToggle">Etkinleştir</button>
+              </div>
+              <label class="set-row">
+                <div><b>Limit dolarken bildir</b><span>5 saatlik ya da haftalık limit %80 ve %95'i geçince</span></div>
+                <input type="checkbox" class="switch" id="nLimits" />
+              </label>
+            </div>
+            <div class="set-group">
               <h3><i data-icon="flame"></i>Zorlanma uyarısı</h3>
               <label class="set-row">
                 <div><b>Bilgisayarı yoran işlemleri göster</b><span>Bir işlem uzun süre işlemciyi ya da belleği aşırı kullanırsa ekranda büyük bir uyarı çıkar</span></div>
@@ -184,6 +196,24 @@
     <!-- loud warning when a process strains the PC (hog.js) -->
     <div id="heat" hidden></div>
     <div class="hog-alert" id="hogAlert" hidden></div>
+
+    <div class="modal" id="limModal" hidden>
+      <div class="modal-box glass">
+        <h2>Kullanım limitlerini göster</h2>
+        <p class="modal-sub">Pro / Max planının 5 saatlik ve haftalık limitlerini Claude Code, status line'ına gönderdiği bilgide bildirir. Bunu okuyabilmek için Agentinan şunu yapacak:</p>
+        <ul class="lim-list">
+          <li><code>~/.claude/settings.json</code> dosyasına bir <code>statusLine</code> ayarı ekler (önce dosyanın yedeğini alır)</li>
+          <li>Bu ayar küçük bir betiği çalıştırır; betik sadece limit bilgisini Agentinan'ın klasörüne kaydeder, başka bir şey saklamaz</li>
+          <li>Daha önce kendi status line'ın varsa o da aynen çalışmaya devam eder</li>
+        </ul>
+        <p class="modal-sub">İstediğin zaman Ayarlar'dan kaldırabilirsin. Limitler, terminalde çalışan bir Claude Code oturumu (örneğin Agentinan'dan başlatılan) bir istek yaptığında güncellenir.</p>
+        <div class="modal-err" id="limErr"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn ghost" id="limCancel">Vazgeç</button>
+          <button type="button" class="btn primary" id="limGo">Etkinleştir</button>
+        </div>
+      </div>
+    </div>
 
     <div class="modal" id="newModal" hidden>
       <form class="modal-box glass" id="newForm">
