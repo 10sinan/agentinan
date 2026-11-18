@@ -16,15 +16,17 @@ function git(cwd, args, { okCodes = [0], timeout = 20_000, maxBuffer = 16 * 1024
   });
 }
 
-const roots = new Map(); // folder → repository root ('' when not in a repository)
+const roots = new Map(); // folder → { root, at }; root is '' when the folder is not in a repository
+const NEG_TTL = 30_000; // "not a repository" is rechecked after this long (the folder may get `git init`)
 
 async function rootOf(dir) {
-  if (roots.has(dir)) return roots.get(dir);
+  const c = roots.get(dir);
+  if (c && (c.root || Date.now() - c.at < NEG_TTL) && (!c.root || fs.existsSync(c.root))) return c.root;
   let r = '';
   try {
     if (fs.statSync(dir).isDirectory()) r = (await git(dir, ['rev-parse', '--show-toplevel'], { timeout: 5000 })).trim();
   } catch {}
-  roots.set(dir, r);
+  roots.set(dir, { root: r, at: Date.now() });
   return r;
 }
 
@@ -73,7 +75,8 @@ class Git {
   }
 
   // Repositories of the given folders (session cwds and user-added ones), deduplicated, with a change count each.
-  async repos(dirs) {
+  async repos(dirs, fresh = false) {
+    if (fresh) for (const d of dirs) roots.delete(d);
     const out = [];
     const seen = new Set();
     for (const d of dirs) {
@@ -107,6 +110,7 @@ class Git {
     r = this.repo(r);
     file = safePath(file);
     if (kind === 'untracked') return clipDiff(await git(r, ['diff', '--no-color', '--no-index', '--', '/dev/null', file], { okCodes: [0, 1] }));
+    if (kind === 'conflict') return clipDiff(await git(r, ['diff', '--no-color', '--', file], { okCodes: [0, 1] }));
     const args = ['diff', '--no-color'];
     if (kind === 'staged') args.push('--cached');
     return clipDiff(await git(r, [...args, '--', file]));

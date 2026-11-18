@@ -321,6 +321,15 @@ class Collector {
       }
     };
     walk(PROJ_DIR, 0);
+    // forget transcripts from earlier days that no running session uses (keeps memory and per-poll work flat)
+    const live = new Set(this.fileOf.values());
+    for (const [file, t] of this.transcripts) {
+      if (live.has(file)) continue; // a live session's subagent files are read again on the next poll
+      try {
+        if (fs.statSync(file).mtimeMs >= start.getTime()) continue;
+      } catch {}
+      this.transcripts.delete(file);
+    }
   }
 
   snapshot() {

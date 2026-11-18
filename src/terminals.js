@@ -50,14 +50,16 @@ class Terminals {
   spawn(key, args, cwd, kind) {
     const proc = pty.spawn(this.bin, args, { name: 'xterm-256color', cols: 100, rows: 30, cwd, env: childEnv() });
     const t = { key, proc, buffer: '', kind, cols: 100, rows: 30 };
+    // t.key, not key: an Agentinan-owned session is renamed to own:<pid> once its pid is known
     proc.onData((d) => {
       t.buffer += d;
       if (t.buffer.length > MAX_BUFFER) t.buffer = t.buffer.slice(-MAX_BUFFER);
-      this.send('term:data', { key, data: d });
+      this.send('term:data', { key: t.key, data: d });
     });
     proc.onExit(() => {
-      if (this.terms.get(key) === t) this.terms.delete(key);
-      this.send('term:exit', { key });
+      t.exited = true;
+      if (this.terms.get(t.key) === t) this.terms.delete(t.key);
+      this.send('term:exit', { key: t.key });
     });
     this.terms.set(key, t);
     return t;
@@ -84,7 +86,9 @@ class Terminals {
     const t = this.terms.get(key);
     if (!t) return false;
     t.proc.write(String(text));
-    setTimeout(() => t.proc.write('\r'), 120);
+    setTimeout(() => {
+      if (!t.exited) t.proc.write('\r');
+    }, 120);
     return true;
   }
 

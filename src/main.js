@@ -198,7 +198,7 @@ if (!app.requestSingleInstanceLock()) {
         const r = await dialog.showOpenDialog(win, { title: 'Git deposu ekle', properties: ['openDirectory'] });
         if (r.canceled) return null;
         const dir = r.filePaths[0];
-        const [repo] = await gitApi.repos([dir]);
+        const [repo] = await gitApi.repos([dir], true);
         if (!repo) throw new Error('Bu klasör bir git deposu değil');
         if (!settings.gitRepos.includes(repo.root)) {
           settings.gitRepos = [...settings.gitRepos, repo.root];

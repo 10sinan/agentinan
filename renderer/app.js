@@ -28,6 +28,9 @@ function fmtTok(n) {
   return String(n);
 }
 
+// POSIX shell single quotes: nothing inside is expanded; an embedded ' becomes '\''
+const shq = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
+
 const fmtCost = (c) => '$' + (c >= 100 ? c.toFixed(0) : c.toFixed(2));
 
 function ago(ms) {
@@ -35,11 +38,19 @@ function ago(ms) {
   const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
   if (s < 60) return s + ' sn';
   if (s < 3600) return Math.round(s / 60) + ' dk';
-  if (s < 86400) return Math.floor(s / 3600) + ' sa ' + (Math.round(s / 60) % 60) + ' dk';
+  if (s < 86400) return Math.floor(s / 3600) + ' sa ' + (Math.floor(s / 60) % 60) + ' dk';
   return Math.floor(s / 86400) + ' gün';
 }
 
-const ctxLimit = (s) => (s.model && /^Haiku 4/.test(s.model) ? 200_000 : 1_000_000);
+const ctxLimit = (s) => {
+  if (s.context > 200_000) return 1_000_000;
+  const m = /^(Opus|Sonnet|Haiku|Fable|Mythos) (\d+)\.?(\d*)/.exec(s.model || '');
+  if (!m) return 200_000;
+  const v = Number(m[2]) + Number(m[3] || 0) / 10;
+  if (m[1] === 'Fable' || m[1] === 'Mythos') return 1_000_000;
+  if (m[1] === 'Haiku') return v >= 5 ? 1_000_000 : 200_000;
+  return v >= 4.6 ? 1_000_000 : 200_000; // Opus / Sonnet 4.6 and later
+};
 
 function toast(text) {
   let t = document.querySelector('.toast');
@@ -205,7 +216,7 @@ $('grid').addEventListener('click', (e) => {
   if (!s) return;
   if (act === 'open') return void api.openFolder(s.cwd);
   if (act === 'resume') {
-    api.copy(`cd ${JSON.stringify(s.cwd)} && claude --resume ${s.id}`);
+    api.copy(`cd ${shq(s.cwd)} && claude --resume ${s.id}`);
     return toast('Devam komutu kopyalandı');
   }
   if (act === 'map') {

@@ -86,10 +86,10 @@ class Monitor {
     const ignore = new Set(limits.ignore || []);
     const hogs = [];
     for (const p of procs.values()) {
-      if (ignore.has(p.name) || isOwn(p.pid)) continue;
       const memPct = (p.rss / this.memTotal) * 100;
       const cpuHot = p.cpu >= limits.cpu;
       const memHot = memPct >= limits.memPct;
+      if ((cpuHot || memHot) && (ignore.has(p.name) || isOwn(p.pid))) continue;
       let h = this.hot.get(p.pid);
       if (cpuHot || memHot) {
         if (!h || h.start !== p.start) this.hot.set(p.pid, (h = { since: now, start: p.start }));
@@ -119,6 +119,11 @@ class Monitor {
       this.notified.add(key);
     }
     for (const pid of this.hot.keys()) if (!procs.has(pid)) this.hot.delete(pid);
+    for (const key of this.notified) {
+      const [pid, start] = key.split(':');
+      const p = procs.get(Number(pid));
+      if (!p || p.start !== start) this.notified.delete(key); // that process has ended
+    }
     return hogs.sort((a, b) => b.cpu - a.cpu || b.mem - a.mem);
   }
 

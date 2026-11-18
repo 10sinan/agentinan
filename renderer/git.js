@@ -133,15 +133,16 @@
     const html =
       section('Çakışmalar', s.conflicts, 'conflict') +
       section('Commit\'e hazır', s.staged, 'staged', `<button class="fa" data-a="unstage-all" title="Hepsini çıkar">${icon('minus')}</button>`) +
-      section('Değişiklikler', s.unstaged, 'unstaged', `<button class="fa" data-a="stage-all" title="Hepsini hazırla">${icon('plus')}</button>`) +
-      section('Yeni dosyalar', s.untracked, 'untracked', `<button class="fa" data-a="stage-all" title="Hepsini hazırla">${icon('plus')}</button>`);
+      section('Değişiklikler', s.unstaged, 'unstaged', `<button class="fa" data-a="stage-unstaged" title="Bu bölümün hepsini hazırla">${icon('plus')}</button>`) +
+      section('Yeni dosyalar', s.untracked, 'untracked', `<button class="fa" data-a="stage-untracked" title="Bu bölümün hepsini hazırla">${icon('plus')}</button>`);
     $('gFiles').innerHTML = html || `<div class="gclean">${icon('check')}<span>Çalışma alanı temiz</span></div>`;
   }
 
   $('gFiles').addEventListener('click', async (e) => {
     const a = e.target.closest('.fa')?.dataset.a;
     const row = e.target.closest('.frow');
-    if (a === 'stage-all') await call(G.stage(repo, 'all'));
+    if (a === 'stage-unstaged') await call(G.stage(repo, status.unstaged.map((f) => f.path)));
+    else if (a === 'stage-untracked') await call(G.stage(repo, status.untracked.map((f) => f.path)));
     else if (a === 'unstage-all') await call(G.unstage(repo, 'all'));
     else if (a && row) await call(a === 'stage' ? G.stage(repo, [row.dataset.path]) : G.unstage(repo, [row.dataset.path]));
     else if (row) {
@@ -172,6 +173,7 @@
 
   // ---------- commit ----------
   async function doCommit() {
+    if (busy) return;
     const msg = $('gMsg').value.trim();
     if (!repo || !status) return;
     if (!msg) {
@@ -228,6 +230,7 @@
     if (!status) return;
     // nothing chosen: show the first changed file
     const all = [
+      ...status.conflicts.map((f) => ({ path: f.path, kind: 'conflict' })),
       ...status.staged.map((f) => ({ path: f.path, kind: 'staged' })),
       ...status.unstaged.map((f) => ({ path: f.path, kind: 'unstaged' })),
       ...status.untracked.map((f) => ({ path: f.path, kind: 'untracked' })),
@@ -238,7 +241,9 @@
     renderFiles();
     const text = await call(G.diff(repo, sel.path, sel.kind), true);
     if (mode !== 'diff') return;
-    const label = { staged: 'commit\'e hazır', unstaged: 'değişiklik', untracked: 'yeni dosya' }[sel.kind] || '';
+    const label = { staged: 'commit\'e hazır', unstaged: 'değişiklik', untracked: 'yeni dosya', conflict: 'çakışma' }[sel.kind] || '';
+    if (sel.kind === 'conflict')
+      return setBody(`<pre class="chead">${esc(text || 'Çakışma işaretleri dosyanın içinde (<<<<<<< / >>>>>>>).')}</pre>`, `${icon('file')}<b>${esc(sel.path)}</b><span>${label}</span>`);
     setBody(text ? renderDiff(text) : `<div class="gnote">Bu dosyada gösterilecek metin farkı yok (ikili dosya ya da sadece izin değişikliği olabilir).</div>`, `${icon('file')}<b>${esc(sel.path)}</b><span>${label}</span>`);
   }
 
@@ -267,7 +272,7 @@
       if (line.startsWith('+')) out.push(`<div class="dl add"><span class="ln"></span><span class="ln">${n++}</span><span class="code">${esc(line.slice(1)) || ' '}</span></div>`);
       else if (line.startsWith('-')) out.push(`<div class="dl del"><span class="ln">${o++}</span><span class="ln"></span><span class="code">${esc(line.slice(1)) || ' '}</span></div>`);
       else if (line.startsWith('\\')) out.push(`<div class="dl meta"><span class="ln"></span><span class="ln"></span><span class="code">${esc(line)}</span></div>`);
-      else if (line.length || inHunk) out.push(`<div class="dl"><span class="ln">${o++}</span><span class="ln">${n++}</span><span class="code">${esc(line.slice(1)) || ' '}</span></div>`);
+      else if (line.startsWith(' ')) out.push(`<div class="dl"><span class="ln">${o++}</span><span class="ln">${n++}</span><span class="code">${esc(line.slice(1)) || ' '}</span></div>`);
     }
     return `${head || ''}<div class="diff">${out.join('')}</div>`;
   }

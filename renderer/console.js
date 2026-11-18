@@ -13,9 +13,12 @@
   let pendingKey = null; // a session we just started that isn't in the snapshot yet
 
 
-  function ensure(key) {
+  // retry: the user chose this session (select / tab), so a closed attach may be opened again;
+  // snapshot updates never re-attach, or a stopping session would get a new `claude attach` every poll
+  function ensure(key, retry) {
     let t = terms.get(key);
     if (t && !t.dead) return t;
+    if (t && (!retry || Date.now() - t.deadAt < 10_000)) return t;
     if (t) {
       t.term.dispose();
       t.el.remove();
@@ -42,6 +45,7 @@
       if (!r || r.error) {
         term.write(`\r\n\x1b[31mBağlanılamadı${r && r.error ? ': ' + r.error : ''}\x1b[0m\r\n`);
         t.dead = true;
+        t.deadAt = Date.now();
         return;
       }
       // The buffer already holds everything sent before this reply, so nothing that arrived meanwhile is lost.
@@ -65,6 +69,7 @@
     const t = terms.get(key);
     if (!t) return;
     t.dead = true;
+    t.deadAt = Date.now();
     t.term.write('\r\n\x1b[90m— bağlantı kapandı —\x1b[0m\r\n');
   });
 
@@ -105,7 +110,7 @@
     $('tlist').innerHTML = `<h4>Komut verilebilen</h4>${items}${pending}<button class="btn sm" id="tlistNew">${icon('plus')}Yeni oturum</button>`;
   }
 
-  function update() {
+  function update(retry) {
     const snap = D.snap();
     if (pendingKey) {
       const s = snap.sessions.find((x) => x.control === pendingKey);
@@ -124,7 +129,7 @@
     $('tmain').hidden = !key;
     if (!key) return;
 
-    const t = ensure(key);
+    const t = ensure(key, retry === true);
     for (const x of terms.values()) x.el.style.display = x === t ? 'block' : 'none';
     const s = list.find((x) => x.control === key);
     $('conTitle').innerHTML = s
@@ -141,11 +146,11 @@
     }
   }
 
-  window.addEventListener('dash:select', update);
-  window.addEventListener('dash:snapshot', update);
+  window.addEventListener('dash:select', () => update(true));
+  window.addEventListener('dash:snapshot', () => update(false));
   window.addEventListener('dash:tab', (e) => {
     if (e.detail !== 'terminal') return;
-    update();
+    update(true);
     requestAnimationFrame(() => {
       fitNow();
       if (current) text.focus();
