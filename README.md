@@ -4,7 +4,7 @@
 Bir oturum onay ya da cevap beklediğinde, ya da işini bitirdiğinde masaüstü bildirimi gönderir.
 [Orbiterm](https://github.com/atalaykarahan/orbiterm) fikrinden esinlenildi, ama kod sıfırdan yazıldı.
 
-Arayüz dört sekmeden oluşur: **Harita**, **Oturumlar**, **Terminal** ve **Ayarlar**. 3D harita hep arka planda durur; diğer sekmeler onun üstünde cam görünümlü paneller olarak açılır.
+Arayüz beş sekmeden oluşur: **Harita**, **Oturumlar**, **Terminal**, **Git** ve **Ayarlar**. 3D harita hep arka planda durur; diğer sekmeler onun üstünde cam görünümlü paneller olarak açılır.
 
 - **Yörünge haritası:** Ortadaki güneş sizsiniz, her oturum bir gezegen.
   - Turuncu: çalışıyor (arkasında kuyruk izi bırakır).
@@ -19,6 +19,7 @@ Arayüz dört sekmeden oluşur: **Harita**, **Oturumlar**, **Terminal** ve **Aya
   Bu oturumlar Claude Code'un arka plan oturumlarıdır (`claude --bg`). Agentinan kapansa da çalışmaya devam ederler ve tekrar açınca yeniden bağlanılır.
   Daha önce hiç onaylanmamış bir klasör seçerseniz Claude'un "bu klasöre güveniyor musun" sorusu terminalde çıkar. Böyle bir oturum Agentinan kapanınca kapanır.
   VS Code'da ya da başka bir terminalde açılan oturumlar sadece izlenir; onlara dışarıdan komut gönderilemez.
+- **Git:** Oturumlarınızın çalıştığı git depoları kendiliğinden listelenir; başka bir depoyu **Depo ekle** ile ekleyebilirsiniz. Değişen dosyaları ve farklarını görür, dosyaları commit'e hazırlar ya da çıkarır, commit atarsınız. **Geçmiş** görünümü tüm dalları bir grafikle gösterir; bir commit'e tıklayınca içeriği açılır. Pull (sadece ileri sarma) ve Push düğmeleri de buradadır.
 - **Bildirimler:** "Seni beklediğinde bildir" ve "Bitirdiğinde bildir" ayarları **Ayarlar** sekmesinde. "Bitti" bildirimi, pencere öndeyken gönderilmez.
 
 ## Gereksinimler
@@ -58,6 +59,8 @@ Pro ya da Max aboneliğinde bu tutarı ödemezsiniz.
 | [src/pricing.js](src/pricing.js) | Model fiyatları ve maliyet hesabı |
 | [src/terminals.js](src/terminals.js) | Agentinan'dan başlatılan oturumları açar, bağlanır, komut gönderir |
 | [renderer/console.js](renderer/console.js) | Terminal paneli, komut kutusu ve "Yeni oturum" penceresi |
+| [src/git.js](src/git.js) | Git komutları: durum, fark, stage, commit, geçmiş, push / pull |
+| [renderer/git.js](renderer/git.js) | Git sekmesi |
 | [src/main.js](src/main.js) | Electron penceresi, 1,5 saniyede bir okuma, bildirimler, ayarlar |
 | [renderer/app.js](renderer/app.js) | Sekmeler, oturum kartları, harita bilgi kartı ve ayarlar |
 | [renderer/orbit3d.js](renderer/orbit3d.js) | 3D yörünge haritası (three.js) |

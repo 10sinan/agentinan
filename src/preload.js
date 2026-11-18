@@ -19,4 +19,20 @@ contextBridge.exposeInMainWorld('agentinan', {
   resize: (key, cols, rows) => ipcRenderer.send('term:resize', { key, cols, rows }),
   onTermData: (fn) => ipcRenderer.on('term:data', (_e, m) => fn(m)),
   onTermExit: (fn) => ipcRenderer.on('term:exit', (_e, m) => fn(m)),
+
+  // Source Control; each call resolves to { data } or { error }
+  git: {
+    repos: () => ipcRenderer.invoke('git:repos'),
+    addRepo: () => ipcRenderer.invoke('git:add-repo'),
+    status: (r) => ipcRenderer.invoke('git:status', r),
+    diff: (r, file, kind) => ipcRenderer.invoke('git:diff', r, file, kind),
+    stage: (r, files) => ipcRenderer.invoke('git:stage', r, files),
+    unstage: (r, files) => ipcRenderer.invoke('git:unstage', r, files),
+    commit: (r, msg) => ipcRenderer.invoke('git:commit', r, msg),
+    log: (r) => ipcRenderer.invoke('git:log', r),
+    show: (r, hash) => ipcRenderer.invoke('git:show', r, hash),
+    push: (r) => ipcRenderer.invoke('git:push', r),
+    pull: (r) => ipcRenderer.invoke('git:pull', r),
+    fetch: (r) => ipcRenderer.invoke('git:fetch', r),
+  },
 });

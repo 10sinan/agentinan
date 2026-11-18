@@ -5,7 +5,7 @@
 const api = window.agentinan;
 const COLORS = { busy: '#f6b860', waiting: '#ff6f86', idle: '#6cc8e6' };
 const LABELS = { busy: 'Çalışıyor', waiting: 'Seni bekliyor', idle: 'Boşta' };
-const TITLES = { map: 'Harita', sessions: 'Oturumlar', terminal: 'Terminal', settings: 'Ayarlar' };
+const TITLES = { map: 'Harita', sessions: 'Oturumlar', terminal: 'Terminal', git: 'Git', settings: 'Ayarlar' };
 
 let snap = { sessions: [], today: { tokens: 0, cost: 0, byModel: {} } };
 let selected = null;

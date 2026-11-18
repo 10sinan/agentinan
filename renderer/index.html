@@ -21,6 +21,7 @@
         <button class="tab" data-tab="map" title="Harita"><i data-icon="orbit"></i><span class="tab-label">Harita</span></button>
         <button class="tab" data-tab="sessions" title="Oturumlar"><i data-icon="grid"></i><span class="tab-label">Oturumlar</span><b class="tbadge" id="badgeSessions" hidden></b></button>
         <button class="tab" data-tab="terminal" title="Terminal"><i data-icon="terminal"></i><span class="tab-label">Terminal</span><b class="tbadge" id="badgeTerminal" hidden></b></button>
+        <button class="tab" data-tab="git" title="Git"><i data-icon="branch"></i><span class="tab-label">Git</span></button>
         <div class="rail-spacer"></div>
         <button class="tab" data-tab="settings" title="Ayarlar"><i data-icon="sliders"></i><span class="tab-label">Ayarlar</span></button>
       </nav>
@@ -87,6 +88,40 @@
           </div>
         </section>
 
+        <section class="view" data-view="git">
+          <div class="panel glass-panel git-panel">
+            <aside class="glist">
+              <h4>Depolar</h4>
+              <div id="gRepos"></div>
+              <button class="btn sm" id="gAddRepo" title="Bir oturumun çalışmadığı bir depoyu da ekleyebilirsin"><i data-icon="plus"></i>Depo ekle</button>
+            </aside>
+            <div class="gchanges">
+              <div class="g-head" id="gHead"></div>
+              <div class="g-commit">
+                <textarea id="gMsg" rows="2" placeholder="Commit mesajı (Ctrl+Enter ile commit)"></textarea>
+                <button class="btn primary" id="gCommit"><i data-icon="check"></i><span>Commit</span></button>
+              </div>
+              <div class="g-files" id="gFiles"></div>
+            </div>
+            <div class="gview">
+              <div class="gview-head">
+                <div class="seg" id="gMode">
+                  <button data-m="diff"><i data-icon="file"></i>Fark</button>
+                  <button data-m="history"><i data-icon="history"></i>Geçmiş</button>
+                </div>
+                <span class="gview-title" id="gTitle"></span>
+              </div>
+              <div class="gview-body" id="gBody"></div>
+            </div>
+            <div class="tempty" id="gEmpty" hidden>
+              <div class="tempty-icon"><i data-icon="branch"></i></div>
+              <h2>Git deposu bulunamadı</h2>
+              <p>Oturumlarının çalıştığı klasörlerde git deposu yok. Bir depoyu elle ekleyebilirsin.</p>
+              <button class="btn primary" id="gEmptyAdd"><i data-icon="plus"></i>Depo ekle</button>
+            </div>
+          </div>
+        </section>
+
         <section class="view" data-view="settings">
           <div class="panel glass-panel settings">
             <div class="set-group">
@@ -146,6 +181,7 @@
     <script src="icons.js"></script>
     <script src="app.js"></script>
     <script src="console.js"></script>
+    <script src="git.js"></script>
     <script type="module" src="orbit3d.js"></script>
   </body>
 </html>

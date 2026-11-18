@@ -3,11 +3,12 @@ const fs = require('fs');
 const path = require('path');
 const { Collector } = require('./collector');
 const { Terminals } = require('./terminals');
+const { Git } = require('./git');
 
 app.commandLine.appendSwitch('ozone-platform-hint', 'auto'); // native Wayland when available (Fedora's default session)
 
 const POLL_MS = 1500;
-const DEFAULTS = { notifyWaiting: true, notifyDone: true, quality: 'high' };
+const DEFAULTS = { notifyWaiting: true, notifyDone: true, quality: 'high', gitRepos: [] };
 
 let win = null;
 let settings = { ...DEFAULTS };
@@ -71,6 +72,8 @@ function annotate(snap) {
   return snap;
 }
 let prev = null; // sessionId → status from the last poll
+let lastSnap = null;
+const gitApi = new Git();
 
 function poll() {
   let snap;
@@ -94,6 +97,7 @@ function poll() {
     }
   }
   prev = now;
+  lastSnap = snap;
   if (win && !win.isDestroyed()) win.webContents.send('snapshot', snap);
 }
 
@@ -140,6 +144,43 @@ if (!app.requestSingleInstanceLock()) {
         return { error: e.message };
       }
     });
+    // Source Control: every call answers { data } or { error }.
+    const wrap = (fn) => async (_e, ...args) => {
+      try {
+        return { data: await fn(...args) };
+      } catch (e) {
+        return { error: e.message || String(e) };
+      }
+    };
+    ipcMain.handle(
+      'git:repos',
+      wrap(() => gitApi.repos([...(lastSnap ? lastSnap.sessions.map((s) => s.cwd) : []), ...settings.gitRepos])),
+    );
+    ipcMain.handle(
+      'git:add-repo',
+      wrap(async () => {
+        const r = await dialog.showOpenDialog(win, { title: 'Git deposu ekle', properties: ['openDirectory'] });
+        if (r.canceled) return null;
+        const dir = r.filePaths[0];
+        const [repo] = await gitApi.repos([dir]);
+        if (!repo) throw new Error('Bu klasör bir git deposu değil');
+        if (!settings.gitRepos.includes(repo.root)) {
+          settings.gitRepos = [...settings.gitRepos, repo.root];
+          saveSettings();
+        }
+        return repo.root;
+      }),
+    );
+    ipcMain.handle('git:status', wrap((r) => gitApi.status(r)));
+    ipcMain.handle('git:diff', wrap((r, file, kind) => gitApi.diff(r, file, kind)));
+    ipcMain.handle('git:stage', wrap((r, files) => gitApi.stage(r, files)));
+    ipcMain.handle('git:unstage', wrap((r, files) => gitApi.unstage(r, files)));
+    ipcMain.handle('git:commit', wrap((r, msg) => gitApi.commit(r, msg)));
+    ipcMain.handle('git:log', wrap((r) => gitApi.log(r)));
+    ipcMain.handle('git:show', wrap((r, hash) => gitApi.show(r, hash)));
+    ipcMain.handle('git:push', wrap((r) => gitApi.push(r)));
+    ipcMain.handle('git:pull', wrap((r) => gitApi.pull(r)));
+    ipcMain.handle('git:fetch', wrap((r) => gitApi.fetch(r)));
     ipcMain.on('term:input', (_e, { key, data }) => terminals.write(String(key), data));
     ipcMain.on('term:line', (_e, { key, text }) => terminals.sendLine(String(key), text));
     ipcMain.on('term:resize', (_e, { key, cols, rows }) => terminals.resize(String(key), cols | 0, rows | 0));
