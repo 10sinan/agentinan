@@ -3,12 +3,15 @@
 :root {
   --bg: #05060b;
   --text: #eef1f8;
-  --text-2: rgba(238, 241, 248, 0.66);
-  --text-3: rgba(238, 241, 248, 0.42);
+  --text-2: color-mix(in srgb, var(--text) 66%, transparent);
+  --text-3: color-mix(in srgb, var(--text) 42%, transparent);
+  --surface: #161a28;
+  --green: #6fdc9a;
+  --on-accent: #0b0d1a;
 
   /* glass layers */
-  --glass: rgba(22, 26, 40, 0.42);
-  --glass-strong: rgba(18, 21, 33, 0.66);
+  --glass: color-mix(in srgb, var(--surface) 42%, transparent);
+  --glass-strong: color-mix(in srgb, var(--surface) 66%, transparent);
   --glass-hi: rgba(255, 255, 255, 0.06);
   --glass-hover: rgba(255, 255, 255, 0.09);
   --edge: rgba(255, 255, 255, 0.1);
@@ -20,7 +23,7 @@
   /* one accent, soft status colours */
   --accent: #8b95ff;
   --accent-2: #b4a2ff;
-  --accent-soft: rgba(139, 149, 255, 0.16);
+  --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent);
   --busy: #f6b860;
   --waiting: #ff6f86;
   --idle: #6cc8e6;
@@ -65,7 +68,7 @@ body {
 
 /* Big panels sit on an already blurred map, so they skip backdrop-filter (cheaper on the GPU). */
 .glass-panel {
-  background: linear-gradient(180deg, rgba(30, 34, 52, 0.55), rgba(16, 19, 30, 0.6));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--surface) 55%, transparent), color-mix(in srgb, var(--surface) 60%, transparent));
   border: 1px solid var(--edge);
   box-shadow: var(--shine), var(--shadow);
   border-radius: var(--r-lg);
@@ -123,7 +126,7 @@ body:not([data-tab='map']) #scene {
   border-radius: 50%;
   margin-bottom: 14px;
   background: radial-gradient(circle at 34% 30%, #fff8e0 0%, #ffcf7a 30%, #f08a24 62%, #8a3a0a 100%);
-  box-shadow: 0 0 22px rgba(246, 184, 96, 0.55), 0 0 0 4px rgba(246, 184, 96, 0.08);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--busy) 55%, transparent), 0 0 0 4px color-mix(in srgb, var(--busy) 8%, transparent);
 }
 .rail-spacer {
   flex: 1;
@@ -155,7 +158,7 @@ body:not([data-tab='map']) #scene {
 .tab.active {
   color: var(--text);
   background: var(--accent-soft);
-  box-shadow: inset 0 0 0 1px rgba(139, 149, 255, 0.35);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 .tab.active .ico {
   color: var(--accent);
@@ -172,7 +175,7 @@ body:not([data-tab='map']) #scene {
   color: #fff;
   font: 700 10px/16px var(--font);
   text-align: center;
-  box-shadow: 0 0 10px rgba(255, 111, 134, 0.6);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--waiting) 60%, transparent);
 }
 
 .main {
@@ -303,22 +306,22 @@ body[data-tab='git'] .view[data-view='git'] {
   cursor: default;
 }
 .btn.primary {
-  background: linear-gradient(180deg, #9aa3ff, #7a83f5);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 78%, white), var(--accent));
   border-color: rgba(255, 255, 255, 0.25);
-  color: #0b0d1a;
+  color: var(--on-accent);
   font-weight: 650;
-  box-shadow: 0 6px 20px rgba(139, 149, 255, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--accent) 35%, transparent), inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
 .btn.primary:hover {
-  background: linear-gradient(180deg, #a9b1ff, #8790fa);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 68%, white), color-mix(in srgb, var(--accent) 88%, white));
 }
 .btn.danger {
-  color: #ffb3c0;
-  border-color: rgba(255, 111, 134, 0.3);
-  background: rgba(255, 111, 134, 0.08);
+  color: color-mix(in srgb, var(--waiting) 50%, white);
+  border-color: color-mix(in srgb, var(--waiting) 30%, transparent);
+  background: color-mix(in srgb, var(--waiting) 8%, transparent);
 }
 .btn.danger:hover {
-  background: rgba(255, 111, 134, 0.16);
+  background: color-mix(in srgb, var(--waiting) 16%, transparent);
 }
 .btn.ghost {
   background: transparent;
@@ -358,8 +361,8 @@ textarea::placeholder {
 }
 input:focus,
 textarea:focus {
-  border-color: rgba(139, 149, 255, 0.6);
-  box-shadow: 0 0 0 3px rgba(139, 149, 255, 0.15);
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
 /* status dots */
@@ -410,23 +413,23 @@ textarea:focus {
 }
 .pill.busy {
   color: var(--busy);
-  background: rgba(246, 184, 96, 0.1);
-  border-color: rgba(246, 184, 96, 0.25);
+  background: color-mix(in srgb, var(--busy) 10%, transparent);
+  border-color: color-mix(in srgb, var(--busy) 25%, transparent);
 }
 .pill.waiting {
   color: var(--waiting);
-  background: rgba(255, 111, 134, 0.1);
-  border-color: rgba(255, 111, 134, 0.3);
+  background: color-mix(in srgb, var(--waiting) 10%, transparent);
+  border-color: color-mix(in srgb, var(--waiting) 30%, transparent);
 }
 .pill.idle {
   color: var(--idle);
-  background: rgba(108, 200, 230, 0.08);
-  border-color: rgba(108, 200, 230, 0.22);
+  background: color-mix(in srgb, var(--idle) 8%, transparent);
+  border-color: color-mix(in srgb, var(--idle) 22%, transparent);
 }
 .pill.ctl {
   color: var(--accent-2);
   background: var(--accent-soft);
-  border-color: rgba(139, 149, 255, 0.3);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
 }
 .pill .ico {
   width: 12px;
@@ -577,8 +580,8 @@ textarea:focus {
   display: inline-block;
   font: 700 9.5px var(--mono);
   color: var(--accent-2);
-  background: rgba(139, 149, 255, 0.18);
-  border: 1px solid rgba(139, 149, 255, 0.4);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
   border-radius: 4px;
   padding: 0 4px;
   margin-right: 5px;
@@ -610,7 +613,7 @@ textarea:focus {
 .spark {
   pointer-events: none;
   font: 600 11px var(--mono);
-  color: #ffdca0;
+  color: color-mix(in srgb, var(--busy) 55%, white);
   white-space: nowrap;
   text-shadow: 0 1px 6px #000;
   max-width: 280px;
@@ -652,7 +655,7 @@ textarea:focus {
 }
 .filter.active {
   background: var(--accent-soft);
-  border-color: rgba(139, 149, 255, 0.4);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
   color: var(--text);
 }
 .filter em {
@@ -716,7 +719,7 @@ textarea:focus {
 }
 .card.waiting {
   --c: var(--waiting);
-  border-color: rgba(255, 111, 134, 0.35);
+  border-color: color-mix(in srgb, var(--waiting) 35%, transparent);
 }
 .card.idle {
   --c: var(--idle);
@@ -726,8 +729,8 @@ textarea:focus {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.075), rgba(255, 255, 255, 0.035));
 }
 .card.sel {
-  border-color: rgba(139, 149, 255, 0.55);
-  box-shadow: var(--shine), 0 0 0 1px rgba(139, 149, 255, 0.35), 0 10px 30px rgba(139, 149, 255, 0.12);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: var(--shine), 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent), 0 10px 30px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 .c-top {
   display: flex;
@@ -797,8 +800,8 @@ textarea:focus {
   font-weight: 700;
 }
 .chip.live {
-  border-color: rgba(246, 184, 96, 0.5);
-  color: #ffdca0;
+  border-color: color-mix(in srgb, var(--busy) 50%, transparent);
+  color: color-mix(in srgb, var(--busy) 55%, white);
 }
 .c-stats {
   display: grid;
@@ -879,7 +882,7 @@ textarea:focus {
 }
 .titem.active {
   background: var(--accent-soft);
-  border-color: rgba(139, 149, 255, 0.3);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
   color: var(--text);
 }
 .titem .tn {
@@ -942,7 +945,7 @@ textarea:focus {
   flex: 1;
   min-height: 0;
   position: relative;
-  background: rgba(5, 7, 14, 0.72);
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
 }
 .term-inst {
   position: absolute;
@@ -987,7 +990,7 @@ textarea:focus {
   background: var(--accent-soft);
   color: var(--accent);
   margin-bottom: 16px;
-  box-shadow: inset 0 0 0 1px rgba(139, 149, 255, 0.3);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 .tempty-icon .ico {
   width: 28px;
@@ -1121,7 +1124,7 @@ textarea:focus {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(3, 4, 9, 0.55);
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
   backdrop-filter: blur(6px);
   animation: fade 0.2s ease;
 }
@@ -1223,7 +1226,7 @@ body.low .toast {
   backdrop-filter: none;
 }
 body.low .glass {
-  background: rgba(16, 19, 30, 0.86);
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
 }
 body.low:not([data-tab='map']) #scene {
   filter: brightness(0.35);
@@ -1370,7 +1373,7 @@ body.low:not([data-tab='map']) #scene {
 }
 .frow.active {
   background: var(--accent-soft);
-  border-color: rgba(139, 149, 255, 0.3);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
 }
 .fname {
   font-size: 12.5px;
@@ -1398,7 +1401,7 @@ body.low:not([data-tab='map']) #scene {
 }
 .fcode.c-A,
 .fcode.c-U {
-  color: #6fdc9a;
+  color: var(--green);
 }
 .fcode.c-D {
   color: var(--waiting);
@@ -1444,7 +1447,7 @@ body.low:not([data-tab='map']) #scene {
 .gclean .ico {
   width: 26px;
   height: 26px;
-  color: #6fdc9a;
+  color: var(--green);
 }
 
 .gview {
@@ -1492,7 +1495,7 @@ body.low:not([data-tab='map']) #scene {
 .gview-body {
   flex: 1;
   overflow: auto;
-  background: rgba(5, 7, 14, 0.55);
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
   user-select: text;
 }
 .gnote {
@@ -1514,7 +1517,7 @@ body.low:not([data-tab='map']) #scene {
   align-items: center;
   gap: 8px;
   padding: 8px 14px;
-  background: rgba(22, 26, 40, 0.95);
+  background: color-mix(in srgb, var(--surface) 95%, transparent);
   border-bottom: 1px solid var(--edge);
   font: 600 12px var(--mono);
   color: var(--text);
@@ -1537,21 +1540,21 @@ body.low:not([data-tab='map']) #scene {
   color: var(--text-2);
 }
 .dl.add {
-  background: rgba(111, 220, 154, 0.09);
+  background: color-mix(in srgb, var(--green) 9%, transparent);
 }
 .dl.add .code {
-  color: #b8f2cd;
-  box-shadow: inset 2px 0 0 #6fdc9a;
+  color: color-mix(in srgb, var(--green) 55%, white);
+  box-shadow: inset 2px 0 0 var(--green);
 }
 .dl.del {
-  background: rgba(255, 111, 134, 0.09);
+  background: color-mix(in srgb, var(--waiting) 9%, transparent);
 }
 .dl.del .code {
-  color: #ffc2cc;
+  color: color-mix(in srgb, var(--waiting) 50%, white);
   box-shadow: inset 2px 0 0 var(--waiting);
 }
 .dl.hunk {
-  background: rgba(139, 149, 255, 0.08);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
   margin-top: 6px;
 }
 .dl.hunk .code {
@@ -1612,7 +1615,7 @@ body.low:not([data-tab='map']) #scene {
   height: 9px;
   border-radius: 50%;
   background: var(--c);
-  box-shadow: 0 0 0 2px rgba(5, 7, 14, 0.9), 0 0 8px var(--c);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--bg) 90%, transparent), 0 0 8px var(--c);
 }
 .hsub {
   flex: 1;
@@ -1640,23 +1643,116 @@ body.low:not([data-tab='map']) #scene {
   color: var(--text-2);
 }
 .gref.head {
-  color: #0b0d1a;
+  color: var(--on-accent);
   background: var(--accent);
   border-color: transparent;
 }
 .gref.local {
   color: var(--accent-2);
-  border-color: rgba(139, 149, 255, 0.4);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
 }
 .gref.remote {
   color: var(--idle);
-  border-color: rgba(108, 200, 230, 0.35);
+  border-color: color-mix(in srgb, var(--idle) 35%, transparent);
 }
 .gref.tag {
   color: var(--busy);
-  border-color: rgba(246, 184, 96, 0.4);
+  border-color: color-mix(in srgb, var(--busy) 40%, transparent);
 }
 
 .gview-title b.plain {
   font-family: var(--font);
+}
+
+/* ---------- theme picker ---------- */
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+.theme-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 8px 10px;
+  border-radius: var(--r);
+  border: 1px solid var(--edge);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  font: 500 12px var(--font);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.15s, background 0.15s;
+}
+.theme-card:hover {
+  border-color: var(--edge-strong);
+  transform: translateY(-1px);
+}
+.theme-card.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), 0 8px 24px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.tc-preview {
+  display: block;
+  width: 100%;
+  align-self: stretch;
+  position: relative;
+  height: 62px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: radial-gradient(circle at 75% 55%, color-mix(in srgb, var(--ta) 25%, transparent), transparent 55%), var(--tb);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.tc-bar {
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  bottom: 6px;
+  width: 10px;
+  border-radius: 4px;
+  background: var(--ts);
+}
+.tc-line {
+  position: absolute;
+  left: 24px;
+  top: 12px;
+  width: 52%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--tt);
+  opacity: 0.75;
+}
+.tc-line.short {
+  top: 24px;
+  width: 30%;
+  background: var(--ta);
+  opacity: 1;
+}
+.tc-sun {
+  position: absolute;
+  right: 14px;
+  bottom: 10px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff8e0, #ffcf7a 40%, #f08a24);
+  box-shadow: 0 0 10px rgba(246, 184, 96, 0.6);
+}
+.tc-name {
+  display: block;
+  padding: 0 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tc-sw {
+  display: flex;
+  gap: 4px;
+  padding: 0 2px;
+}
+.tc-sw i {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
 }

@@ -20,6 +20,7 @@ Arayüz beş sekmeden oluşur: **Harita**, **Oturumlar**, **Terminal**, **Git** 
   Daha önce hiç onaylanmamış bir klasör seçerseniz Claude'un "bu klasöre güveniyor musun" sorusu terminalde çıkar. Böyle bir oturum Agentinan kapanınca kapanır.
   VS Code'da ya da başka bir terminalde açılan oturumlar sadece izlenir; onlara dışarıdan komut gönderilemez.
 - **Git:** Oturumlarınızın çalıştığı git depoları kendiliğinden listelenir; başka bir depoyu **Depo ekle** ile ekleyebilirsiniz. Değişen dosyaları ve farklarını görür, dosyaları commit'e hazırlar ya da çıkarır, commit atarsınız. **Geçmiş** görünümü tüm dalları bir grafikle gösterir; bir commit'e tıklayınca içeriği açılır. Pull (sadece ileri sarma) ve Push düğmeleri de buradadır.
+- **Temalar:** Ayarlar sekmesinde 12 tema var: Agentinan, Dracula, Tokyo Night, Catppuccin Mocha, Nord, Gruvbox, One Dark, Rosé Pine, Solarized Dark, Monokai, Synthwave '84 ve GitHub Dark. Tema arayüzü, terminal renklerini, 3D haritanın arka planını ve gezegen renklerini birlikte değiştirir.
 - **Bildirimler:** "Seni beklediğinde bildir" ve "Bitirdiğinde bildir" ayarları **Ayarlar** sekmesinde. "Bitti" bildirimi, pencere öndeyken gönderilmez.
 
 ## Gereksinimler
@@ -61,6 +62,7 @@ Pro ya da Max aboneliğinde bu tutarı ödemezsiniz.
 | [renderer/console.js](renderer/console.js) | Terminal paneli, komut kutusu ve "Yeni oturum" penceresi |
 | [src/git.js](src/git.js) | Git komutları: durum, fark, stage, commit, geçmiş, push / pull |
 | [renderer/git.js](renderer/git.js) | Git sekmesi |
+| [renderer/themes.js](renderer/themes.js) | Tema renkleri; yeni bir tema eklemek için listeye bir giriş eklemek yeter |
 | [src/main.js](src/main.js) | Electron penceresi, 1,5 saniyede bir okuma, bildirimler, ayarlar |
 | [renderer/app.js](renderer/app.js) | Sekmeler, oturum kartları, harita bilgi kartı ve ayarlar |
 | [renderer/orbit3d.js](renderer/orbit3d.js) | 3D yörünge haritası (three.js) |

@@ -8,7 +8,7 @@ const { Git } = require('./git');
 app.commandLine.appendSwitch('ozone-platform-hint', 'auto'); // native Wayland when available (Fedora's default session)
 
 const POLL_MS = 1500;
-const DEFAULTS = { notifyWaiting: true, notifyDone: true, quality: 'high', gitRepos: [] };
+const DEFAULTS = { notifyWaiting: true, notifyDone: true, quality: 'high', theme: 'agentinan', gitRepos: [] };
 
 let win = null;
 let settings = { ...DEFAULTS };

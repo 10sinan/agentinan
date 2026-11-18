@@ -12,29 +12,6 @@
   let current = null;
   let pendingKey = null; // a session we just started that isn't in the snapshot yet
 
-  const THEME = {
-    background: '#00000000',
-    foreground: '#e9ecf5',
-    cursor: '#8b95ff',
-    cursorAccent: '#05060b',
-    selectionBackground: '#8b95ff55',
-    black: '#1b1f2e',
-    brightBlack: '#5b6382',
-    red: '#ff6f86',
-    brightRed: '#ff95a6',
-    green: '#6fdc9a',
-    brightGreen: '#9cf0bd',
-    yellow: '#f6b860',
-    brightYellow: '#ffd38f',
-    blue: '#7aa7ff',
-    brightBlue: '#a6c4ff',
-    magenta: '#b4a2ff',
-    brightMagenta: '#cfc3ff',
-    cyan: '#6cc8e6',
-    brightCyan: '#a6e4f5',
-    white: '#d9deec',
-    brightWhite: '#ffffff',
-  };
 
   function ensure(key) {
     let t = terms.get(key);
@@ -53,7 +30,7 @@
       cursorBlink: true,
       scrollback: 5000,
       allowTransparency: true,
-      theme: THEME,
+      theme: window.themes.xterm(),
     });
     const fit = new FitAddon.FitAddon();
     term.loadAddon(fit);
@@ -74,6 +51,11 @@
     });
     return t;
   }
+
+  window.addEventListener('dash:theme', () => {
+    const theme = window.themes.xterm();
+    for (const t of terms.values()) t.term.options.theme = theme;
+  });
 
   api.onTermData(({ key, data }) => {
     const t = terms.get(key);

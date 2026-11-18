@@ -169,6 +169,20 @@ const STATUS = {
   waiting: new THREE.Color(D.COLORS.waiting),
   idle: new THREE.Color(D.COLORS.idle),
 };
+const ORBIT = { line: new THREE.Color('#7d8cc4'), selected: new THREE.Color('#a78bfa') };
+
+// Theme: space colour, status colours (planets ease toward them), orbit lines.
+function applyTheme(t) {
+  scene.background.set(t.bg);
+  scene.fog.color.set(t.bg);
+  STATUS.busy.set(t.busy);
+  STATUS.waiting.set(t.waiting);
+  STATUS.idle.set(t.idle);
+  ORBIT.line.set(t.accent).lerp(new THREE.Color('#9aa3c7'), 0.5);
+  ORBIT.selected.set(t.accent2);
+  for (const p of planets.values()) p.pulse.material.color.set(t.waiting);
+}
+window.addEventListener('dash:theme', (e) => applyTheme(e.detail));
 const planets = new Map(); // session id → planet object
 const pickables = [];
 
@@ -475,7 +489,7 @@ function animate(now = 0) {
     p.sel.quaternion.copy(camera.quaternion);
     p.sel.scale.setScalar(p.size * 1.45);
     p.orbit.material.opacity = p.id === selected ? 0.55 : 0.18;
-    p.orbit.material.color.set(p.id === selected ? '#a78bfa' : '#7d8cc4');
+    p.orbit.material.color.copy(p.id === selected ? ORBIT.selected : ORBIT.line);
 
     // comet trail
     const pos = p.trail.geometry.attributes.position;
@@ -569,5 +583,6 @@ window.addEventListener('dash:snapshot', (e) => {
   spawnSparks(e.detail.sessions);
 });
 layout(D.snap().sessions);
+applyTheme(window.themes.current());
 resize();
 requestAnimationFrame(animate);

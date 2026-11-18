@@ -3,7 +3,11 @@
 // The 3D map (orbit3d.js) and the terminal view (console.js) talk to this file through window.dash.
 
 const api = window.agentinan;
-const COLORS = { busy: '#f6b860', waiting: '#ff6f86', idle: '#6cc8e6' };
+// status colours follow the theme (themes.js)
+const statusColors = () => {
+  const t = window.themes.current();
+  return { busy: t.busy, waiting: t.waiting, idle: t.idle };
+};
 const LABELS = { busy: 'Çalışıyor', waiting: 'Seni bekliyor', idle: 'Boşta' };
 const TITLES = { map: 'Harita', sessions: 'Oturumlar', terminal: 'Terminal', git: 'Git', settings: 'Ayarlar' };
 
@@ -11,7 +15,7 @@ let snap = { sessions: [], today: { tokens: 0, cost: 0, byModel: {} } };
 let selected = null;
 let tab = 'map';
 let filter = 'all';
-let settings = { notifyWaiting: true, notifyDone: true, quality: 'high' };
+let settings = { notifyWaiting: true, notifyDone: true, quality: 'high', theme: 'agentinan' };
 
 // ---------- helpers ----------
 const $ = (id) => document.getElementById(id);
@@ -228,6 +232,11 @@ function applySettings() {
   $('nDone').checked = settings.notifyDone;
   for (const b of document.querySelectorAll('#quality button')) b.classList.toggle('active', b.dataset.q === settings.quality);
   document.body.classList.toggle('low', settings.quality === 'low');
+  if (settings.theme !== window.themes.current().id) window.themes.apply(settings.theme);
+  try {
+    localStorage.setItem('theme', settings.theme);
+  } catch {}
+  renderThemes();
   window.dispatchEvent(new CustomEvent('dash:settings', { detail: settings }));
 }
 async function saveSettings(patch) {
@@ -241,9 +250,31 @@ $('quality').addEventListener('click', (e) => {
   if (q) saveSettings({ quality: q });
 });
 
+function renderThemes() {
+  $('themeGrid').innerHTML = window.themes.list
+    .map((t) => {
+      const sw = [t.accent, t.accent2, t.busy, t.waiting, t.idle, t.term.green].map((c) => `<i style="background:${c}"></i>`).join('');
+      return `<button class="theme-card${t.id === settings.theme ? ' active' : ''}" data-theme="${t.id}" style="--tb:${t.bg};--ts:${t.surface};--tt:${t.text};--ta:${t.accent}">
+        <span class="tc-preview"><span class="tc-bar"></span><span class="tc-line"></span><span class="tc-line short"></span><span class="tc-sun"></span></span>
+        <span class="tc-name">${esc(t.name)}</span>
+        <span class="tc-sw">${sw}</span>
+      </button>`;
+    })
+    .join('');
+}
+$('themeGrid').addEventListener('click', (e) => {
+  const id = e.target.closest('.theme-card')?.dataset.theme;
+  if (id && id !== settings.theme) {
+    window.themes.apply(id); // instantly, before the save round-trip
+    saveSettings({ theme: id });
+  }
+});
+
 // ---------- shared with orbit3d.js and console.js ----------
 window.dash = {
-  COLORS,
+  get COLORS() {
+    return statusColors();
+  },
   LABELS,
   esc,
   fmtTok,

@@ -272,10 +272,21 @@
     return `${head || ''}<div class="diff">${out.join('')}</div>`;
   }
 
-  const LANE = ['#8b95ff', '#6cc8e6', '#f6b860', '#6fdc9a', '#ff6f86', '#b4a2ff', '#ffd38f'];
+  // lane colours of the history graph come from the theme's terminal palette
+  const lanes = () => {
+    const t = window.themes.current();
+    return [t.accent, t.term.cyan, t.term.yellow, t.term.green, t.term.red, t.term.magenta, t.term.brightYellow];
+  };
+  window.addEventListener('dash:theme', () => {
+    if (mode === 'history' && !commit && D.tab() === 'git') {
+      lastBody = '';
+      loadHistory();
+    }
+  });
 
   function graphHtml(g) {
     let s = '';
+    const LANE = lanes();
     for (let i = 0; i < g.length; i++) {
       const ch = g[i];
       const c = LANE[Math.floor(i / 2) % LANE.length];
