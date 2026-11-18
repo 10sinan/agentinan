@@ -47,7 +47,7 @@
       .map(
         (r) => `<div class="titem${r.root === repo ? ' active' : ''}" data-root="${esc(r.root)}" title="${esc(r.root)}">
           ${icon('branch')}
-          <div class="tn"><b>${esc(r.name)}</b><span>${esc(r.branch || '—')}</span></div>
+          <div class="tn"><b>${esc(r.name)}</b><span title="${esc(r.branch || '')}">${esc(r.branch || '—')}</span></div>
           ${r.changes ? `<em class="gcount">${r.changes}</em>` : ''}
         </div>`,
       )
@@ -94,7 +94,7 @@
       ? `<span class="pill" title="${esc(s.upstream)}">${icon('up')}${s.ahead} ${icon('down')}${s.behind}</span>`
       : `<span class="pill" title="Bu dalın uzak karşılığı yok">uzak dal yok</span>`;
     $('gHead').innerHTML = `
-      <span class="pill ctl">${icon('branch')}${esc(s.branch || '(ayrık HEAD)')}</span>${sync}
+      <span class="pill ctl" title="${esc(s.branch || '(ayrık HEAD)')}">${icon('branch')}${esc(s.branch || '(ayrık HEAD)')}</span>${sync}
       <span class="spacer"></span>
       <button class="btn sm ghost" data-g="fetch" title="Uzak depodaki yenilikleri al (fetch)">${icon('refresh')}</button>
       <button class="btn sm" data-g="pull" title="Uzak değişiklikleri çek (pull, sadece ileri sarma)">${icon('down')}Pull</button>

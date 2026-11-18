@@ -22,7 +22,7 @@ Arayüz beş sekmeden oluşur: **Harita**, **Oturumlar**, **Terminal**, **Git** 
 - **Git:** Oturumlarınızın çalıştığı git depoları kendiliğinden listelenir; başka bir depoyu **Depo ekle** ile ekleyebilirsiniz. Değişen dosyaları ve farklarını görür, dosyaları commit'e hazırlar ya da çıkarır, commit atarsınız. **Geçmiş** görünümü tüm dalları bir grafikle gösterir; bir commit'e tıklayınca içeriği açılır. Pull (sadece ileri sarma) ve Push düğmeleri de buradadır.
 - **Temalar:** Ayarlar sekmesinde 12 tema var: Agentinan, Dracula, Tokyo Night, Catppuccin Mocha, Nord, Gruvbox, One Dark, Rosé Pine, Solarized Dark, Monokai, Synthwave '84 ve GitHub Dark. Tema arayüzü, terminal renklerini, 3D haritanın arka planını ve gezegen renklerini birlikte değiştirir.
 - **Zorlanma uyarısı:** Bir işlem uzun süre bir işlemci çekirdeğinin neredeyse tamamını (varsayılan: %90, 15 saniye) ya da belleğin büyük kısmını (varsayılan: %30) kullanırsa ekranın kenarları kırmızı yanar, büyük bir alarm kartı çıkar ve masaüstü bildirimi gelir. İşlemi bir Claude oturumu başlattıysa o oturumun gezegeni haritada aşırı ısınır: titrer, kızarır ve kıvılcım saçar. Karttan işlemi durdurabilir ya da o programı yok sayabilirsiniz. Sınırlar Ayarlar'dan değiştirilebilir.
-- **Kullanım limitleri:** Pro / Max planının 5 saatlik ve haftalık limitinin ne kadarının kullanıldığı ve ne zaman sıfırlanacağı üst çubukta görünür; %80 ve %95'te bildirim gelir. Açmak için üst çubuktaki **limitleri göster**'e basın: Agentinan `~/.claude/settings.json` dosyasına (yedeğini alarak) bir `statusLine` ekler. Limitler, terminalde çalışan bir Claude Code oturumu istek yaptıkça güncellenir. Ayarlar'dan kaldırılınca eski hali geri gelir.
+- **Kullanım limitleri:** Pro / Max planının 5 saatlik ve haftalık limitinin ne kadarının kullanıldığı ve ne zaman sıfırlanacağı üst çubukta görünür; %80 ve %95'te bildirim gelir. Açmak için **Ayarlar → Kullanım limitleri → Etkinleştir**'e basın: Agentinan `~/.claude/settings.json` dosyasına (yedeğini alarak) bir `statusLine` ekler. Limitler, terminalde çalışan bir Claude Code oturumu istek yaptıkça güncellenir. Ayarlar'dan kaldırılınca eski hali geri gelir.
 - **Bildirimler:** "Seni beklediğinde bildir" ve "Bitirdiğinde bildir" ayarları **Ayarlar** sekmesinde. "Bitti" bildirimi, pencere öndeyken gönderilmez.
 
 ## Gereksinimler
@@ -39,12 +39,24 @@ npm start
 ./install-desktop.sh   # isteğe bağlı: uygulamalar menüsüne ekler
 ```
 
-`node scripts/check.js` Electron açmadan tek bir anlık görüntü yazdırır. Veri okumayı test etmek için kullanılır.
+`node scripts/check.js` Electron açmadan tek bir anlık görüntü yazdırır. Gerçek `~/.claude` verisini elle kontrol etmek için kullanılır.
+
+## Testler
+
+```sh
+npm test
+```
+
+Node'un yerleşik `node:test`'i kullanılır, ek bağımlılık yoktur. Testler fiyat hesabını, transcript ayrıştırmayı, plan limitlerinin `settings.json` üzerindeki ekle / kaldır döngüsünü ve `Git` sınıfını (geçici depolar ve sahte bir uzak depo üzerinde) kapsar. Hepsi geçici klasörlerde çalışır; gerçek `~/.claude` dosyalarına ve depolarınıza dokunmaz. Arayüz ve Electron penceresi testlerin kapsamı dışındadır. Her push ve pull request'te GitHub Actions aynı testleri çalıştırır.
 
 ## Nasıl çalışır
 
-Uygulama yalnızca `~/.claude` altındaki dosyaları okur (`CLAUDE_CONFIG_DIR` ayarlıysa oradakileri).
-Hiçbir şeye yazmaz, ağa da bağlanmaz.
+Veriyi yalnızca `~/.claude` altındaki dosyalardan okur (`CLAUDE_CONFIG_DIR` ayarlıysa oradakilerden). Ağa kendisi bağlanmaz.
+Dışarıya dokunduğu yerler sadece sizin açtığınız özelliklerdir:
+
+- **Kullanım limitleri** açılırsa `~/.claude/settings.json` dosyasına (yedeğini alarak) bir `statusLine` ekler.
+- **Git sekmesi** commit, push, pull ve fetch yapar; bunlar `git` programını çalıştırır, push / pull / fetch ağa bağlanır.
+- **Yeni oturum** Claude Code başlatır.
 
 - `sessions/<pid>.json`: Çalışan her Claude Code süreci için bir dosya. Klasörü ve durumu (`busy` / `idle` / `waiting`) tutar.
   Süreç gerçekten çalışıyor mu diye `/proc/<pid>/stat` dosyasındaki başlangıç zamanıyla karşılaştırılır.
@@ -68,6 +80,7 @@ Pro ya da Max aboneliğinde bu tutarı ödemezsiniz.
 | [src/monitor.js](src/monitor.js) | `/proc`'tan bilgisayarı yoran işlemleri bulur ve hangi oturuma ait olduklarını çıkarır |
 | [renderer/hog.js](renderer/hog.js) | Zorlanma uyarısı: kırmızı çerçeve, alarm kartı, durdur / yok say |
 | [src/limits.js](src/limits.js) | Plan limitleri: status line betiği, ayara ekleme / kaldırma, okuma |
+| [test/](test) | Birim ve entegrasyon testleri (`npm test`) |
 | [src/main.js](src/main.js) | Electron penceresi, 1,5 saniyede bir okuma, bildirimler, ayarlar |
 | [renderer/app.js](renderer/app.js) | Sekmeler, oturum kartları, harita bilgi kartı ve ayarlar |
 | [renderer/orbit3d.js](renderer/orbit3d.js) | 3D yörünge haritası (three.js) |
