@@ -31,11 +31,29 @@ Arayüz beş sekmeden oluşur: **Harita**, **Oturumlar**, **Terminal**, **Git** 
 - Node.js 20 veya üstü
 - [Claude Code](https://code.claude.com) kurulu ve hesabınızla giriş yapılmış olmalı (Pro, Max ya da API anahtarı)
 
+## Kurulum
+
+[Sürümler](https://github.com/10sinan/agentinan/releases) sayfasından indirin:
+
+- **AppImage** (her dağıtımda çalışır):
+  ```sh
+  chmod +x Agentinan-*-x86_64.AppImage
+  ./Agentinan-*-x86_64.AppImage
+  ```
+- **RPM** (Fedora / RHEL / openSUSE):
+  ```sh
+  sudo dnf install ./agentinan-*.x86_64.rpm
+  ```
+  Kurulumdan sonra uygulamalar menüsünde **Agentinan** olarak çıkar.
+
+Claude Code'un kurulu ve hesabınızla giriş yapılmış olması gerekir.
+
 ## Çalıştırma
 
 ```sh
 npm install
 npm start
+npm run dist           # paketler: dist/ altında AppImage ve RPM
 ./install-desktop.sh   # isteğe bağlı: uygulamalar menüsüne ekler
 ```
 

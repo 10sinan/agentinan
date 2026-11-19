@@ -8,6 +8,9 @@ const { Monitor } = require('./monitor');
 const { Limits } = require('./limits');
 
 app.commandLine.appendSwitch('ozone-platform-hint', 'auto'); // native Wayland when available (Fedora's default session)
+// One data folder (~/.config/agentinan) for both `npm start` and the packaged app, whose name is "Agentinan":
+// otherwise switching to the package would start with empty settings.
+app.setPath('userData', path.join(app.getPath('appData'), 'agentinan'));
 
 const POLL_MS = 1500;
 const DEFAULTS = {
@@ -50,6 +53,7 @@ function createWindow() {
     minHeight: 560,
     backgroundColor: '#070a14',
     title: 'Agentinan',
+    icon: path.join(__dirname, '..', 'renderer', 'icon.png'),
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
   });
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));

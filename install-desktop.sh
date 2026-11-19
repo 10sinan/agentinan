@@ -9,7 +9,7 @@ Type=Application
 Name=Agentinan
 Comment=Claude Code oturum panosu
 Exec=env -u ELECTRON_RUN_AS_NODE "$DIR/node_modules/.bin/electron" "$DIR"
-Icon=utilities-system-monitor
+Icon=$DIR/renderer/icon.png
 Terminal=false
 Categories=Development;
 DESKTOP

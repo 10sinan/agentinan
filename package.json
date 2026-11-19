@@ -11,13 +11,14 @@
   "scripts": {
     "start": "env -u ELECTRON_RUN_AS_NODE electron .",
     "check": "node scripts/check.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "dist": "electron-builder --linux AppImage dir && sh scripts/build-rpm.sh"
   },
   "devDependencies": {
-    "electron": "^33.2.1"
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8"
   },
   "dependencies": {
-    "@fontsource-variable/inter": "^5.1.1",
     "@fontsource/jetbrains-mono": "^5.1.1",
     "@lydell/node-pty": "^1.1.0",
     "@xterm/addon-fit": "^0.10.0",
@@ -26,5 +27,41 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "author": "10sinan",
+  "homepage": "https://github.com/10sinan/agentinan",
+  "build": {
+    "appId": "io.github.tensinan.agentinan",
+    "productName": "Agentinan",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**",
+      "renderer/**",
+      "package.json",
+      "!**/*.test.js"
+    ],
+    "asarUnpack": [
+      "node_modules/@lydell/**"
+    ],
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Development",
+      "executableName": "agentinan",
+      "icon": "build/icon.png",
+      "synopsis": "Claude Code oturum panosu",
+      "description": "Linux için Claude Code panosu: 3D yörünge haritası, token ve maliyet, bildirimler, oturumlara komut verme, Git ve temalar.",
+      "maintainer": "10sinan (https://github.com/10sinan)"
+    },
+    "appImage": {
+      "artifactName": "Agentinan-${version}-${arch}.AppImage"
+    },
+    "rpm": {
+      "artifactName": "agentinan-${version}.${arch}.rpm"
+    }
   }
 }
