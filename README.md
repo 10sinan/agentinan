@@ -21,7 +21,7 @@ Arayüz beş sekmeden oluşur: **Harita**, **Oturumlar**, **Terminal**, **Git** 
   VS Code'da ya da başka bir terminalde açılan oturumlar sadece izlenir; onlara dışarıdan komut gönderilemez.
 - **Git:** Oturumlarınızın çalıştığı git depoları kendiliğinden listelenir; başka bir depoyu **Depo ekle** ile ekleyebilirsiniz. Değişen dosyaları ve farklarını görür, dosyaları commit'e hazırlar ya da çıkarır, commit atarsınız. **Geçmiş** görünümü tüm dalları bir grafikle gösterir; bir commit'e tıklayınca içeriği açılır. Pull (sadece ileri sarma) ve Push düğmeleri de buradadır.
 - **Temalar:** Ayarlar sekmesinde 12 tema var: Agentinan, Dracula, Tokyo Night, Catppuccin Mocha, Nord, Gruvbox, One Dark, Rosé Pine, Solarized Dark, Monokai, Synthwave '84 ve GitHub Dark. Tema arayüzü, terminal renklerini, 3D haritanın arka planını ve gezegen renklerini birlikte değiştirir.
-- **Zorlanma uyarısı:** Bir işlem uzun süre bir işlemci çekirdeğinin neredeyse tamamını (varsayılan: %90, 15 saniye) ya da belleğin büyük kısmını (varsayılan: %30) kullanırsa ekranın kenarları kırmızı yanar, büyük bir alarm kartı çıkar ve masaüstü bildirimi gelir. İşlemi bir Claude oturumu başlattıysa o oturumun gezegeni haritada aşırı ısınır: titrer, kızarır ve kıvılcım saçar. Karttan işlemi durdurabilir ya da o programı yok sayabilirsiniz. Sınırlar Ayarlar'dan değiştirilebilir.
+- **Zorlanma uyarısı:** Bir Claude Code oturumunun başlattığı bir işlem (test, sunucu, derleme…) uzun süre bir işlemci çekirdeğinin neredeyse tamamını (varsayılan: %90, 15 saniye) ya da belleğin büyük kısmını (varsayılan: %30) kullanırsa tüm pencerenin kenarlarında kırmızı ışık yanıp söner, sağ altta küçük bir kart çıkar ve masaüstü bildirimi gelir. O oturumun gezegeni haritada aşırı ısınır: titrer, kızarır ve kıvılcım saçar. Karttan işlemi durdurabilir ya da o programı yok sayabilirsiniz. Oturumlarla ilgisi olmayan programlar uyarı vermez. Sınırlar Ayarlar'dan değiştirilebilir.
 - **Kullanım limitleri:** Pro / Max planının 5 saatlik ve haftalık limitinin ne kadarının kullanıldığı ve ne zaman sıfırlanacağı üst çubukta görünür; %80 ve %95'te bildirim gelir. Açmak için **Ayarlar → Kullanım limitleri → Etkinleştir**'e basın: Agentinan `~/.claude/settings.json` dosyasına (yedeğini alarak) bir `statusLine` ekler. Limitler, terminalde çalışan bir Claude Code oturumu istek yaptıkça güncellenir. Ayarlar'dan kaldırılınca eski hali geri gelir.
 - **Bildirimler:** "Seni beklediğinde bildir" ve "Bitirdiğinde bildir" ayarları **Ayarlar** sekmesinde. "Bitti" bildirimi, pencere öndeyken gönderilmez.
 
@@ -78,7 +78,7 @@ Pro ya da Max aboneliğinde bu tutarı ödemezsiniz.
 | [renderer/git.js](renderer/git.js) | Git sekmesi |
 | [renderer/themes.js](renderer/themes.js) | Tema renkleri; yeni bir tema eklemek için listeye bir giriş eklemek yeter |
 | [src/monitor.js](src/monitor.js) | `/proc`'tan bilgisayarı yoran işlemleri bulur ve hangi oturuma ait olduklarını çıkarır |
-| [renderer/hog.js](renderer/hog.js) | Zorlanma uyarısı: kırmızı çerçeve, alarm kartı, durdur / yok say |
+| [renderer/hog.js](renderer/hog.js) | Zorlanma uyarısı: pencere boyu kırmızı ışık, köşedeki kart, durdur / yok say |
 | [src/limits.js](src/limits.js) | Plan limitleri: status line betiği, ayara ekleme / kaldırma, okuma |
 | [test/](test) | Birim ve entegrasyon testleri (`npm test`) |
 | [src/main.js](src/main.js) | Electron penceresi, 1,5 saniyede bir okuma, bildirimler, ayarlar |

@@ -129,13 +129,14 @@ function poll() {
       h.sessionName = s ? s.name : null;
       if (h.fresh) {
         const what = h.reason === 'mem' ? `belleğin %${h.memPct}'ini kullanıyor` : `işlemciyi %${h.cpu} kullanıyor`;
-        notify(`⚠ ${h.name} bilgisayarı yoruyor`, `${what}${s ? ` · ${s.name} oturumundan` : ''}`, s ? s.id : null);
+        if (s) notify(`⚠ ${s.name}: ${h.name} bilgisayarı yoruyor`, what, s.id);
       }
       delete h.fresh;
     }
   } catch (e) {
     console.error('monitor failed', e);
   }
+  hogs = hogs.filter((h) => h.sessionId); // only what Claude Code sessions started
   snap.hogs = hogs;
 
   // plan usage limits (5-hour and weekly window), with a notification at 80% and 95%

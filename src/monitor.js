@@ -81,26 +81,30 @@ class Monitor {
     }
     for (const pid of this.prev.keys()) if (!procs.has(pid)) this.prev.delete(pid);
 
-    // Agentinan's own processes (Electron's renderer and GPU helpers) never count.
-    const isOwn = (pid) => this.ancestor(procs, pid, (a) => a === process.pid) !== null;
+    // Only processes started by a Claude Code session count. Walking up the parents, the first session or
+    // Agentinan itself decides: Agentinan's own helpers (renderer, GPU) never count, but a session Agentinan
+    // runs in its terminal is reached first, so what that session starts does count.
+    const sessionOf = (pid) => {
+      const a = this.ancestor(procs, pid, (x) => sessionPids.has(x) || x === process.pid);
+      return a !== null && a !== process.pid ? a : null;
+    };
     const ignore = new Set(limits.ignore || []);
     const hogs = [];
     for (const p of procs.values()) {
       const memPct = (p.rss / this.memTotal) * 100;
       const cpuHot = p.cpu >= limits.cpu;
       const memHot = memPct >= limits.memPct;
-      if ((cpuHot || memHot) && (ignore.has(p.name) || isOwn(p.pid))) continue;
-      let h = this.hot.get(p.pid);
-      if (cpuHot || memHot) {
-        if (!h || h.start !== p.start) this.hot.set(p.pid, (h = { since: now, start: p.start }));
-      } else {
+      if (!cpuHot && !memHot) {
         this.hot.delete(p.pid);
         continue;
       }
+      const sessionPid = sessionOf(p.pid);
+      if (sessionPid === null || sessionPid === p.pid || ignore.has(p.name)) continue; // not from a session (or the session itself)
+      let h = this.hot.get(p.pid);
+      if (!h || h.start !== p.start) this.hot.set(p.pid, (h = { since: now, start: p.start }));
       const secs = (now - h.since) / 1000;
       // CPU spikes are normal (a build, a test run): only a sustained one counts. Memory counts sooner.
       if (!((cpuHot && secs >= limits.cpuSecs) || (memHot && secs >= 4))) continue;
-      const sessionPid = this.ancestor(procs, p.pid, (a) => sessionPids.has(a));
       const key = `${p.pid}:${p.start}`;
       hogs.push({
         key,
