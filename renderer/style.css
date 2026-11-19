@@ -673,7 +673,7 @@ textarea:focus {
 }
 .srow {
   display: grid;
-  grid-template-columns: 112px minmax(160px, 1.3fr) minmax(110px, 1fr) 96px 72px 72px 104px minmax(160px, 1.6fr) 64px;
+  grid-template-columns: 112px minmax(160px, 1.3fr) minmax(110px, 1fr) 96px 150px 64px 72px minmax(160px, 1.6fr) 64px;
   align-items: center;
   gap: 12px;
   height: 32px;
@@ -2379,4 +2379,12 @@ textarea:focus {
 }
 .lim-list code {
   color: var(--text);
+}
+
+.c-ctx em {
+  font-style: normal;
+  color: var(--text);
+  min-width: 4.5ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }

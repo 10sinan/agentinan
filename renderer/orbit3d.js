@@ -311,7 +311,8 @@ function setOrbitGeometry(p) {
   p.orbit.geometry.setFromPoints(pts);
 }
 
-const planetSize = (s) => Math.max(9, Math.min(22, 9 + 3 * Math.log10(1 + s.tokens.total / 1e5)));
+// planet size follows how much Claude has written in the session (output tokens)
+const planetSize = (s) => Math.max(9, Math.min(22, 9 + 4 * Math.log10(1 + s.tokens.output / 2e3)));
 
 function layout(sessions) {
   const n = sessions.length;
@@ -329,7 +330,7 @@ function layout(sessions) {
     p.status = s.status;
     const waiting = s.status === 'waiting' && s.waitingFor ? ` · ${D.esc(s.waitingFor)}` : '';
     p.el.className = `planet-label ${s.status}${s.id === D.selected() ? ' sel' : ''}`;
-    p.el.innerHTML = `<b>${s.control ? '<i class="ctl">›_</i>' : ''}${D.esc(s.name)}</b><span>${D.LABELS[s.status] || D.esc(s.status)}${waiting} · ${D.fmtTok(s.tokens.total)}</span>`;
+    p.el.innerHTML = `<b>${s.control ? '<i class="ctl">›_</i>' : ''}${D.esc(s.name)}</b><span>${D.LABELS[s.status] || D.esc(s.status)}${waiting} · ${D.fmtTok(s.context)} bağlam</span>`;
     syncMoons(p, s.subagents.filter((a) => a.active).length);
     // a process this session started is straining the PC: the planet overheats
     const hog = D.hogs().find((h) => h.sessionId === s.id);
@@ -415,7 +416,7 @@ labels.domElement.addEventListener('pointermove', (e) => {
     `<b>${D.esc(s.name)}</b><br><span class="m">${D.esc(s.cwd)}</span><br>` +
     `${D.LABELS[s.status] || D.esc(s.status)}${s.waitingFor ? ' · ' + D.esc(s.waitingFor) : ''} · ${D.ago(s.statusSince)}<br>` +
     (lt ? `<span class="m">Son araç:</span> ${D.esc(lt.name)} ${D.esc(lt.brief)}<br>` : '') +
-    `<span class="m">${D.fmtTok(s.tokens.total)} token · ${D.fmtCost(s.cost)}</span>`;
+    `<span class="m">bağlam ${D.fmtTok(s.context)} · çıkış ${D.fmtTok(s.tokens.output)} · ${D.fmtCost(s.cost)}</span>`;
   tip.hidden = false;
   tip.style.left = Math.min(e.clientX - r.left + 14, r.width - 330) + 'px';
   tip.style.top = e.clientY - r.top + 14 + 'px';

@@ -95,11 +95,11 @@ function renderSub() {
 function renderToday() {
   const t = snap.today;
   const models = Object.entries(t.byModel || {})
-    .filter(([, v]) => v.tokens > 0)
+    .filter(([, v]) => v.tokens > 0 || v.output > 0)
     .sort((a, b) => b[1].cost - a[1].cost);
   $('today').innerHTML =
-    `<span class="stat-chip lead" title="API liste fiyatıyla tahmini; Pro/Max aboneliğinde bu tutarı ödemezsin">Bugün <b>${fmtTok(t.tokens)}</b> token <b class="cost">${fmtCost(t.cost)}</b></span>` +
-    models.map(([m, v]) => `<span class="stat-chip">${esc(m)} <b>${fmtTok(v.tokens)}</b> ${fmtCost(v.cost)}</span>`).join('');
+    `<span class="stat-chip lead" title="Bugün Claude'un yazdığı (çıkış) token'lar. Önbellekten okunanlarla birlikte toplam: ${fmtTok(t.tokens)}. Maliyet API liste fiyatıyla tahmindir; Pro/Max aboneliğinde bu tutarı ödemezsin.">bugün çıkış <b>${fmtTok(t.output || 0)}</b> <b class="cost">${fmtCost(t.cost)}</b></span>` +
+    models.map(([m, v]) => `<span class="stat-chip" title="${esc(m)}: çıkış ${fmtTok(v.output || 0)}, önbellek dahil toplam ${fmtTok(v.tokens)}">${esc(m)} <b>${fmtTok(v.output || 0)}</b> ${fmtCost(v.cost)}</span>`).join('');
 }
 
 // ---------- plan usage limits (top bar) ----------
@@ -210,13 +210,20 @@ function row(s) {
     <span class="c-nm">${esc(s.name)}${s.control ? ' <em class="tag">ctl</em>' : ''}${hog ? ' <em class="tag hot">yoruyor</em>' : ''}</span>
     <span class="c-pj" title="${esc(s.cwd)}">${esc(s.project)}</span>
     <span class="c-md">${esc(s.model || '—')}</span>
-    <span class="c-num">${fmtTok(s.tokens.total)}</span>
+    <span class="c-ctx" title="Bağlam: şu an ${s.context.toLocaleString('tr-TR')} / ${fmtTok(ctxLimit(s))} token dolu"><em>${fmtTok(s.context)}</em><i><b style="width:${pct.toFixed(1)}%"></b></i>${Math.round(pct)}%</span>
+    <span class="c-num" title="Claude'un bu oturumda yazdığı token'lar">${fmtTok(s.tokens.output)}</span>
     <span class="c-num">${fmtCost(s.cost)}</span>
-    <span class="c-ctx" title="Bağlam: ${s.context.toLocaleString('tr-TR')} / ${fmtTok(ctxLimit(s))} token"><i><b style="width:${pct.toFixed(1)}%"></b></i>${Math.round(pct)}%</span>
     <span class="c-tl">${lt ? `${esc(lt.name)} <small>${esc(lt.brief)}</small>` : '—'}</span>
     <span class="c-num dim">${ago(s.statusSince)}</span>
   </div>
   ${s.id === selected ? detail(s, hog) : ''}`;
+}
+
+// share of the prompt served from the cache: high is good (cheaper, faster)
+function cacheHit(s) {
+  const t = s.tokens;
+  const prompt = t.input + t.cacheRead + t.cacheWrite5m + t.cacheWrite1h;
+  return prompt ? Math.round((t.cacheRead / prompt) * 100) + '%' : '—';
 }
 
 function detail(s, hog) {
@@ -242,10 +249,13 @@ function detail(s, hog) {
       <div class="sd-tools">${tools || '—'}</div>
       <div class="sd-k">token</div>
       <div class="sd-kv">
+        <span>bağlam (şu an)</span><b>${fmtTok(s.context)} / ${fmtTok(ctxLimit(s))}</b>
         <span>giriş</span><b>${fmtTok(s.tokens.input)}</b>
         <span>çıkış</span><b>${fmtTok(s.tokens.output)}</b>
         <span>önbellek yazma</span><b>${fmtTok(s.tokens.cacheWrite5m + s.tokens.cacheWrite1h)}</b>
         <span>önbellek okuma</span><b>${fmtTok(s.tokens.cacheRead)}</b>
+        <span>önbellek isabeti</span><b>${cacheHit(s)}</b>
+        <span>toplam (önbellek dahil)</span><b>${fmtTok(s.tokens.total)}</b>
         <span>araç çağrısı</span><b>${s.toolCount}</b>
         <span>pid</span><b>${s.pid}</b>
       </div>
@@ -265,7 +275,7 @@ function renderGrid() {
   const fn = FILTERS.find((f) => f[0] === filter)[2];
   const list = snap.sessions.filter(fn);
   const scroll = grid.scrollTop;
-  const head = `<div class="srow shead"><span>durum</span><span>oturum</span><span>proje</span><span>model</span><span class="c-num">token</span><span class="c-num">maliyet*</span><span>bağlam</span><span>son araç</span><span class="c-num">süre</span></div>`;
+  const head = `<div class="srow shead"><span>durum</span><span>oturum</span><span>proje</span><span>model</span><span>bağlam</span><span class="c-num">çıkış</span><span class="c-num">maliyet*</span><span>son araç</span><span class="c-num">süre</span></div>`;
   grid.innerHTML = list.length
     ? head + list.map(row).join('') + `<div class="sfoot">* API liste fiyatıyla tahmin. Satıra tıkla: ayrıntı.</div>`
     : `<div class="grid-empty">${snap.sessions.length ? 'bu filtreye uyan oturum yok' : 'çalışan Claude Code oturumu yok'}</div>`;
@@ -308,7 +318,8 @@ function renderMapCard() {
     <div class="mc-meta">${esc(s.project)} · ${esc(s.model || 'model yok')} · ${ago(s.statusSince)}${s.waitingFor && s.status === 'waiting' ? ' · ' + esc(s.waitingFor) : ''}</div>
     ${s.lastPrompt ? `<div class="mc-prompt">› ${esc(s.lastPrompt)}</div>` : ''}
     <div class="mc-stats">
-      <div><span>Token</span><b>${fmtTok(s.tokens.total)}</b></div>
+      <div><span>Bağlam</span><b>${fmtTok(s.context)}</b></div>
+      <div><span>Çıkış</span><b>${fmtTok(s.tokens.output)}</b></div>
       <div><span>Maliyet*</span><b>${fmtCost(s.cost)}</b></div>
       <div><span>Araç</span><b>${s.toolCount}</b></div>
     </div>
