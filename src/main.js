@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Notification, shell, clipboard, Menu, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, Notification, shell, clipboard, Menu, dialog, Tray, nativeImage } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { Collector } = require('./collector');
@@ -8,6 +8,7 @@ const { findLinks } = require('./links');
 const { Git } = require('./git');
 const { Monitor } = require('./monitor');
 const { Limits } = require('./limits');
+const { trayIcon } = require('./trayicon');
 
 app.commandLine.appendSwitch('ozone-platform-hint', 'auto'); // native Wayland when available (Fedora's default session)
 // One data folder (~/.config/agentinan) for both `npm start` and the packaged app, whose name is "Agentinan":
@@ -28,6 +29,7 @@ const DEFAULTS = {
   hogMem: 30,
   hogIgnore: [],
   notifyLimits: true, // when the 5-hour or weekly limit passes 80% and 95%
+  trayKeep: true, // closing the window leaves Agentinan running in the tray
 };
 
 let win = null;
@@ -62,18 +64,100 @@ function createWindow() {
   win.webContents.on('console-message', (_e, level, message, line, source) => {
     if (level >= 2) console.error(`[page] ${message} (${source}:${line})`);
   });
+  // with the tray on, closing the window only hides it: sessions are still watched and notifications still come
+  win.on('close', (e) => {
+    if (!quitting && tray && settings.trayKeep) {
+      e.preventDefault();
+      win.hide();
+    }
+  });
   win.on('closed', () => (win = null));
+}
+
+function showWindow(sessionId) {
+  if (!win) createWindow();
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+  if (sessionId) win.webContents.send('select', sessionId);
+}
+
+// ---------- tray: a sun coloured by the sessions' state, with the sessions in its menu ----------
+let tray = null;
+let quitting = false;
+let traySig = '';
+const STATE_LABEL = { waiting: 'seni bekliyor', busy: 'çalışıyor', idle: 'boşta' };
+const STATE_DOT = { waiting: '●', busy: '◐', idle: '○' };
+
+function trayImage(state) {
+  const img = nativeImage.createFromBuffer(trayIcon(state, 32));
+  img.addRepresentation({ scaleFactor: 2, buffer: trayIcon(state, 64) });
+  return img;
+}
+
+function createTray() {
+  try {
+    tray = new Tray(trayImage('idle'));
+  } catch (e) {
+    console.error('tray failed', e);
+    tray = null;
+    return;
+  }
+  tray.on('click', () => showWindow());
+  updateTray(lastSnap, true);
+}
+
+function updateTray(snap, force) {
+  if (!tray) return;
+  const sessions = (snap && snap.sessions) || [];
+  const waiting = sessions.filter((s) => s.status === 'waiting');
+  const busy = sessions.filter((s) => s.status === 'busy');
+  const state = waiting.length ? 'waiting' : busy.length ? 'busy' : 'idle';
+  const cost = snap && snap.today ? `$${snap.today.cost.toFixed(2)}` : '';
+  const sig = JSON.stringify([state, settings.trayKeep, cost, sessions.map((s) => [s.id, s.name, s.status])]);
+  if (sig === traySig && !force) return;
+  traySig = sig;
+  tray.setImage(trayImage(state));
+  const parts = [waiting.length && `${waiting.length} bekliyor`, busy.length && `${busy.length} çalışıyor`].filter(Boolean);
+  tray.setToolTip(`Agentinan · ${parts.length ? parts.join(' · ') : 'hepsi boşta'}${cost ? ` · bugün ${cost}` : ''}`);
+  // waiting sessions first: they are what the tray is for
+  const order = [...waiting, ...busy, ...sessions.filter((s) => s.status !== 'waiting' && s.status !== 'busy')];
+  const items = order.map((s) => ({
+    label: `${STATE_DOT[s.status] || '○'}  ${s.name} — ${STATE_LABEL[s.status] || s.status}`,
+    click: () => showWindow(s.id),
+  }));
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: `Agentinan${cost ? ` · bugün ${cost}` : ''}`, enabled: false },
+      { type: 'separator' },
+      ...(items.length ? items : [{ label: 'Açık oturum yok', enabled: false }]),
+      { type: 'separator' },
+      { label: 'Pencereyi göster', click: () => showWindow() },
+      {
+        label: 'Kapatınca tepside kalsın',
+        type: 'checkbox',
+        checked: !!settings.trayKeep,
+        click: (mi) => {
+          settings.trayKeep = mi.checked;
+          saveSettings();
+          if (win && !win.isDestroyed()) win.webContents.send('settings-changed');
+        },
+      },
+      {
+        label: 'Çıkış',
+        click: () => {
+          quitting = true;
+          app.quit();
+        },
+      },
+    ]),
+  );
 }
 
 function notify(title, body, sessionId) {
   if (!Notification.isSupported()) return;
   const n = new Notification({ title, body, silent: false });
-  n.on('click', () => {
-    if (!win) createWindow();
-    win.show();
-    win.focus();
-    win.webContents.send('select', sessionId);
-  });
+  n.on('click', () => showWindow(sessionId));
   n.show();
 }
 
@@ -165,18 +249,14 @@ function poll() {
     }
   }
   lastSnap = snap;
+  updateTray(snap);
   if (win && !win.isDestroyed()) win.webContents.send('snapshot', snap);
 }
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
-    if (win) {
-      if (win.isMinimized()) win.restore();
-      win.focus();
-    }
-  });
+  app.on('second-instance', () => showWindow()); // also brings back a window hidden in the tray
 
   app.whenReady().then(() => {
     Menu.setApplicationMenu(null);
@@ -186,12 +266,14 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.handle('settings:set', (_e, patch) => {
       settings = { ...settings, ...patch };
       saveSettings();
+      updateTray(lastSnap, true);
       return settings;
     });
     ipcMain.handle('open-folder', (_e, dir) => (typeof dir === 'string' && path.isAbsolute(dir) ? shell.openPath(dir) : 'bad path'));
     ipcMain.handle('copy', (_e, text) => clipboard.writeText(String(text)));
     ipcMain.handle('refresh', () => poll());
     ipcMain.handle('timeline', () => collector.timeline());
+    ipcMain.handle('history', (_e, days) => collector.history(Math.max(1, Math.min(90, days | 0 || 30))));
     ipcMain.handle('pick-folder', async () => {
       const r = await dialog.showOpenDialog(win, { title: 'Claude hangi klasörde çalışsın?', properties: ['openDirectory'] });
       return r.canceled ? null : r.filePaths[0];
@@ -313,6 +395,7 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.on('term:line', (_e, { key, text }) => terminals.sendLine(String(key), text));
     ipcMain.on('term:resize', (_e, { key, cols, rows }) => terminals.resize(String(key), cols | 0, rows | 0));
     createWindow();
+    createTray();
     win.webContents.on('did-finish-load', poll);
     setInterval(poll, POLL_MS);
     // AGENTINAN_SHOT=/path.png: save one screenshot after start-up and quit (for checking the UI).
@@ -330,6 +413,7 @@ if (!app.requestSingleInstanceLock()) {
     }
   });
 
+  app.on('before-quit', () => (quitting = true));
   app.on('window-all-closed', () => app.quit());
   app.on('will-quit', () => {
     terminals.disposeAll();

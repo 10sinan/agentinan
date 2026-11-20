@@ -18,6 +18,13 @@ const dayKey = (ms) => {
   return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 };
 
+// The project a folder belongs to; a worktree (…/repo/.claude/worktrees/x) counts as its repository.
+function projectName(cwd) {
+  if (!cwd) return '(bilinmiyor)';
+  const m = /^(.*?)[\\/]\.claude[\\/]worktrees[\\/]/.exec(cwd);
+  return path.basename(m ? m[1] : cwd) || '(bilinmiyor)';
+}
+
 const emptyUsage = () => ({ input: 0, output: 0, cacheWrite5m: 0, cacheWrite1h: 0, cacheRead: 0 });
 
 function usageOf(u) {
@@ -409,6 +416,81 @@ class Collector {
     }
   }
 
+  // Spending of the last `days` days: per day (split by model) and per project. Transcripts that changed are re-read;
+  // a reply copied into another transcript (a resumed conversation) is counted once, by its message id.
+  history(days = 30) {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - (days - 1));
+    const keys = [];
+    for (let i = 0; i < days; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      keys.push({ key: dayKey(d.getTime()), date: d.getTime() });
+    }
+    const wanted = new Set(keys.map((k) => k.key));
+    const files = [];
+    const walk = (dir, depth) => {
+      let ents = [];
+      try {
+        ents = fs.readdirSync(dir, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const e of ents) {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) {
+          if (depth < 3 && e.name !== 'memory') walk(p, depth + 1);
+        } else if (e.name.endsWith('.jsonl')) {
+          try {
+            const st = fs.statSync(p);
+            if (st.mtimeMs >= start.getTime()) files.push({ file: p, size: st.size, mtime: st.mtimeMs });
+          } catch {}
+        }
+      }
+    };
+    walk(PROJ_DIR, 0);
+
+    this.histCache ||= new Map(); // file → { size, mtime, msgs: [[id, { day, model, usage }]], cwd }
+    const seen = new Set(files.map((f) => f.file));
+    for (const f of this.histCache.keys()) if (!seen.has(f)) this.histCache.delete(f);
+    const msgs = new Map(); // message id → { day, model, usage, cwd }
+    for (const f of files) {
+      let c = this.histCache.get(f.file);
+      if (!c || c.size !== f.size || c.mtime !== f.mtime) {
+        const live = this.transcripts.get(f.file);
+        const t = live || new Transcript(f.file);
+        t.update();
+        c = { size: f.size, mtime: f.mtime, msgs: [...t.msgs], cwd: t.cwd };
+        this.histCache.set(f.file, c);
+      }
+      for (const [id, v] of c.msgs) if (wanted.has(v.day)) msgs.set(id, { ...v, cwd: c.cwd });
+    }
+
+    const byDay = new Map(keys.map((k) => [k.key, { date: k.date, cost: 0, output: 0, byModel: {} }]));
+    const byProject = new Map();
+    for (const v of msgs.values()) {
+      const d = byDay.get(v.day);
+      const cost = costOf(v.model, v.usage);
+      const name = prettyModel(v.model);
+      d.cost += cost;
+      d.output += v.usage.output;
+      d.byModel[name] = (d.byModel[name] || 0) + cost;
+      const proj = projectName(v.cwd);
+      const p = byProject.get(proj) || { name: proj, cost: 0, output: 0 };
+      p.cost += cost;
+      p.output += v.usage.output;
+      byProject.set(proj, p);
+    }
+    const daysOut = [...byDay.values()];
+    return {
+      days: daysOut,
+      projects: [...byProject.values()].sort((a, b) => b.cost - a.cost),
+      total: daysOut.reduce((s, d) => s + d.cost, 0),
+      output: daysOut.reduce((s, d) => s + d.output, 0),
+    };
+  }
+
   // Today's sessions for the map's replay: when each was active, minute by minute (closed sessions included).
   timeline() {
     const start = new Date();
@@ -519,4 +601,4 @@ class Collector {
   }
 }
 
-module.exports = { Collector, Transcript, CLAUDE_DIR };
+module.exports = { Collector, Transcript, CLAUDE_DIR, projectName };
