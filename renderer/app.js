@@ -654,7 +654,7 @@ $('restoreOwn').onchange = () => saveSettings({ restoreOwn: $('restoreOwn').chec
 $('restoreShells').onchange = () => saveSettings({ restoreShells: $('restoreShells').checked });
 
 // ---------- keyboard shortcuts ----------
-const KEY_DEFAULTS = { dock: 'Ctrl+`', newSession: 'Ctrl+Shift+N' };
+const KEY_DEFAULTS = { dock: 'Ctrl+Q', newSession: 'Ctrl+Shift+N' };
 const KEY_ACTIONS = {
   dock: () => window.toggleDock && window.toggleDock(),
   newSession: () => window.openNewSession && window.openNewSession(),

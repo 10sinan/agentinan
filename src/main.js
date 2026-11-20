@@ -35,7 +35,7 @@ const DEFAULTS = {
   trayKeep: true, // closing the window leaves Agentinan running in the tray
   restoreOwn: true, // resume the sessions Agentinan ran itself when it starts again
   restoreShells: true, // reopen the drawer's terminals (same folders, fresh shells) when it starts again
-  keys: { dock: 'Ctrl+`', newSession: 'Ctrl+Shift+N' }, // keyboard shortcuts, changeable in Settings
+  keys: { dock: 'Ctrl+Q', newSession: 'Ctrl+Shift+N' }, // keyboard shortcuts, changeable in Settings
 };
 
 let win = null;

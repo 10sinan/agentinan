@@ -1,6 +1,6 @@
 'use strict';
 // The terminal drawer at the bottom of the window: ordinary shells (not Claude sessions) for running a project.
-// A shortcut (Ctrl+` by default, see Settings) or the button in the top bar opens and closes it; the shells keep running while it is closed.
+// A shortcut (Ctrl+Q by default, see Settings) or the button in the top bar opens and closes it; the shells keep running while it is closed.
 (() => {
   const api = window.agentinan;
   const D = window.dash;
