@@ -2,7 +2,8 @@
 //   bg:<jobId>   a Claude Code background session (`claude --bg`), shown through `claude attach <jobId>`.
 //                Killing the attach process only detaches: the session keeps running after Agentinan quits.
 //   own:<pid>    a plain interactive `claude` that Agentinan runs itself, used for a folder that hasn't been
-//                trusted yet (background sessions refuse those). It ends when Agentinan quits.
+//                trusted yet (background sessions refuse those). It ends when Agentinan quits; main.js
+//                remembers those and resumes them (`claude --resume`) at the next start.
 const { execFile } = require('child_process');
 const fs = require('fs');
 const os = require('os');
@@ -134,6 +135,22 @@ class Terminals {
         resolve({ key, kind: 'bg' });
       });
     });
+  }
+
+  // Re-opens a session Agentinan ran itself in an earlier run: `claude --resume <id>` in its folder.
+  resume(id, cwd) {
+    if (!/^[A-Za-z0-9_-]+$/.test(String(id)) || typeof cwd !== 'string' || !path.isAbsolute(cwd)) return null;
+    try {
+      if (!fs.statSync(cwd).isDirectory()) return null;
+    } catch {
+      return null;
+    }
+    const t = this.spawn(null, ['--resume', String(id)], cwd, 'own');
+    const key = `own:${t.proc.pid}`;
+    this.terms.delete(null);
+    t.key = key;
+    this.terms.set(key, t);
+    return key;
   }
 
   // Types the first prompt once Claude Code's input box has appeared (its "❯" marker), not before.
