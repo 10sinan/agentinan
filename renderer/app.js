@@ -613,6 +613,7 @@ window.dash = {
   pickerOpen,
   fmtTok,
   fmtCost,
+  ctxLimit,
   ago,
   toast,
   snap: () => snap,

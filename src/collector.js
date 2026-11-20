@@ -49,6 +49,15 @@ function clip(s, n) {
 
 const WRITE_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
 
+// A Bash command that commits or pushes (the map launches a comet for it). Push wins when a command does both.
+function gitAction(cmd) {
+  if (typeof cmd !== 'string') return null;
+  const parts = cmd.split(/&&|\|\||[;|\n]/);
+  if (parts.some((x) => /^\s*git\b(\s+-\S+(\s+\S+)?)*\s+push\b/.test(x))) return 'push';
+  if (parts.some((x) => /^\s*git\b(\s+-\S+(\s+\S+)?)*\s+commit\b/.test(x))) return 'commit';
+  return null;
+}
+
 function toolBrief(name, input) {
   if (!input || typeof input !== 'object') return '';
   const base = (p) => (p ? path.basename(String(p)) : '');
@@ -120,6 +129,15 @@ class Transcript {
     this.files = new Set();
     this.edited = new Map(); // file → time of the last write to it (Edit / Write / …), newest last
     this.lastActivity = 0;
+    this.cwd = '';
+    this.firstTs = 0;
+    this.minutes = new Set(); // minutes (ms / 60000) with any activity: the map's replay of the day
+  }
+
+  mark(ts) {
+    if (!ts) return;
+    if (!this.firstTs || ts < this.firstTs) this.firstTs = ts;
+    this.minutes.add(Math.floor(ts / 60000));
   }
 
   update() {
@@ -165,6 +183,7 @@ class Transcript {
       return;
     }
     const ts = j.timestamp ? Date.parse(j.timestamp) : 0;
+    if (j.cwd && typeof j.cwd === 'string') this.cwd = j.cwd;
     switch (j.type) {
       case 'ai-title':
         this.aiTitle = j.aiTitle || this.aiTitle;
@@ -185,6 +204,7 @@ class Transcript {
   assistant(j, ts) {
     const m = j.message || {};
     if (ts) this.lastActivity = Math.max(this.lastActivity, ts);
+    this.mark(ts);
     if (m.model && m.model !== '<synthetic>') this.model = m.model;
     if (m.id && m.usage && m.model !== '<synthetic>') {
       const u = usageOf(m.usage);
@@ -196,6 +216,8 @@ class Transcript {
       if (c.type === 'text' && c.text && c.text.trim()) this.lastText = clip(c.text, 300);
       if (c.type === 'tool_use') {
         const t = { id: c.id, name: c.name, brief: toolBrief(c.name, c.input), ts: ts || Date.now() };
+        const g = c.name === 'Bash' && gitAction(c.input && c.input.command);
+        if (g) t.git = g;
         this.recentTools.push(t);
         if (this.recentTools.length > 30) this.recentTools.shift();
         this.pending.set(c.id, t);
@@ -222,6 +244,7 @@ class Transcript {
     const m = j.message || {};
     if (Array.isArray(m.content)) for (const c of m.content) if (c.type === 'tool_result') this.pending.delete(c.tool_use_id);
     if (j.isMeta || j.isSidechain) return;
+    this.mark(ts);
     const t = promptText(m.content);
     if (t && !looksInjected(t)) {
       this.lastPrompt = clip(t, 300);
@@ -386,6 +409,31 @@ class Collector {
     }
   }
 
+  // Today's sessions for the map's replay: when each was active, minute by minute (closed sessions included).
+  timeline() {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const from = Math.floor(start.getTime() / 60000);
+    const sub = `${path.sep}subagents${path.sep}`;
+    const out = [];
+    for (const [file, t] of this.transcripts) {
+      if (file.includes(sub)) continue;
+      t.update();
+      const minutes = [...t.minutes].filter((m) => m >= from).sort((a, b) => a - b);
+      if (!minutes.length) continue;
+      const id = path.basename(file, '.jsonl');
+      out.push({
+        id,
+        name: t.customTitle || t.aiTitle || path.basename(t.cwd || '') || id.slice(0, 8),
+        cwd: t.cwd,
+        start: minutes[0] * 60000,
+        end: minutes[minutes.length - 1] * 60000 + 59999,
+        minutes,
+      });
+    }
+    return { from: from * 60000, now: Date.now(), sessions: out.sort((a, b) => a.start - b.start) };
+  }
+
   snapshot() {
     const now = Date.now();
     if (now - this.lastDayScan > 15_000) {
@@ -435,7 +483,7 @@ class Collector {
         context: t ? t.context : 0,
         lastPrompt: t ? t.lastPrompt : '',
         lastText: t ? t.lastText : '',
-        recentTools: t ? t.recentTools.slice(-8).map(({ id, name, brief, ts }) => ({ id, name, brief, ts })) : [],
+        recentTools: t ? t.recentTools.slice(-8).map(({ id, name, brief, ts, git }) => ({ id, name, brief, ts, git })) : [],
         toolCount: t ? t.toolCount : 0,
         pendingTools: t ? t.pending.size : 0,
         fileCount: t ? t.files.size : 0,
