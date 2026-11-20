@@ -122,3 +122,23 @@ test('untracked file diff works', async () => {
   fs.writeFileSync(path.join(work, 'u.txt'), 'untracked!\n');
   assert.match(await g.diff(work, 'u.txt', 'untracked'), /\+untracked!/);
 });
+
+test('head diff shows staged and unstaged changes together, and works before the first commit', async () => {
+  const { g } = await open();
+  fs.writeFileSync(path.join(work, 'a.txt'), 'one\nstaged line\n');
+  sh(work, 'add', 'a.txt');
+  fs.writeFileSync(path.join(work, 'a.txt'), 'one\nstaged line\nunstaged line\n');
+  const d = await g.diff(work, 'a.txt', 'head');
+  assert.match(d, /\+staged line/);
+  assert.match(d, /\+unstaged line/);
+  sh(work, 'checkout', '-q', 'HEAD', '--', 'a.txt');
+
+  const fresh = path.join(base, 'fresh');
+  fs.mkdirSync(fresh);
+  sh(fresh, 'init', '-q', '-b', 'main');
+  fs.writeFileSync(path.join(fresh, 'f.txt'), 'first file\n');
+  sh(fresh, 'add', 'f.txt');
+  const g2 = new Git();
+  await g2.repos([fresh]);
+  assert.match(await g2.diff(fresh, 'f.txt', 'head'), /\+first file/);
+});

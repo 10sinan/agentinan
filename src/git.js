@@ -111,6 +111,11 @@ class Git {
     file = safePath(file);
     if (kind === 'untracked') return clipDiff(await git(r, ['diff', '--no-color', '--no-index', '--', '/dev/null', file], { okCodes: [0, 1] }));
     if (kind === 'conflict') return clipDiff(await git(r, ['diff', '--no-color', '--', file], { okCodes: [0, 1] }));
+    if (kind === 'head') {
+      // staged and unstaged changes together; a repository without commits has no HEAD, so compare the index instead
+      const hasHead = await git(r, ['rev-parse', '--verify', '-q', 'HEAD'], { okCodes: [0, 1] }).then((o) => !!o.trim());
+      return clipDiff(await git(r, ['diff', '--no-color', hasHead ? 'HEAD' : '--cached', '--', file]));
+    }
     const args = ['diff', '--no-color'];
     if (kind === 'staged') args.push('--cached');
     return clipDiff(await git(r, [...args, '--', file]));
