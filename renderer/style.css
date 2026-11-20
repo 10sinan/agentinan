@@ -593,6 +593,33 @@ textarea:focus {
   display: flex;
   gap: 8px;
 }
+.model-pick {
+  font: 600 11.5px var(--mono);
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: 6px;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+.model-pick option {
+  background: var(--bg);
+  color: var(--text);
+}
+.model-chip {
+  font-family: var(--mono);
+}
+.map-card .mc-model {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  color: var(--text-3);
+  font-size: 12px;
+}
+.sd-kv .model-cell {
+  font-weight: 400;
+}
 .map-card .mc-send {
   display: flex;
   gap: 6px;
