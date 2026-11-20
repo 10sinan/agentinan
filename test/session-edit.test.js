@@ -62,3 +62,28 @@ test('deleteSession removes the transcript and its subagent folder, and nothing 
   assert.ok(fs.existsSync(other));
   assert.throws(() => c.deleteSession(SID, cwd), /bulunamadı/); // already gone
 });
+
+test('rename and deleteSession refuse a transcript that is a symlink to a file outside projects/', () => {
+  fresh(prompt + '\n');
+  const victim = path.join(home, 'victim.jsonl'); // outside projects/
+  fs.writeFileSync(victim, 'keep\n');
+  fs.rmSync(file);
+  fs.symlinkSync(victim, file);
+  const c = new Collector();
+  assert.throws(() => c.rename(SID, cwd, 'x'), /bulunamadı/);
+  assert.throws(() => c.deleteSession(SID, cwd), /bulunamadı/);
+  assert.strictEqual(fs.readFileSync(victim, 'utf8'), 'keep\n');
+});
+
+test('deleteSession only unlinks a subagent folder that is a symlink to elsewhere', () => {
+  fresh(prompt + '\n');
+  const other = path.join(home, 'other-dir');
+  fs.mkdirSync(other, { recursive: true });
+  fs.writeFileSync(path.join(other, 'precious.txt'), 'keep');
+  fs.rmSync(path.join(projDir, SID), { recursive: true });
+  fs.symlinkSync(other, path.join(projDir, SID));
+  new Collector().deleteSession(SID, cwd);
+  assert.ok(!fs.existsSync(file));
+  assert.ok(!fs.existsSync(path.join(projDir, SID)));
+  assert.strictEqual(fs.readFileSync(path.join(other, 'precious.txt'), 'utf8'), 'keep');
+});
