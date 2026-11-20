@@ -329,7 +329,7 @@ function makePlanet(s) {
   // orbit path, slightly tilted so the system has depth
   const orbit = new THREE.Line(
     new THREE.BufferGeometry(),
-    new THREE.LineBasicMaterial({ color: '#7d8cc4', transparent: true, opacity: 0.18, depthWrite: false }),
+    new THREE.LineBasicMaterial({ color: '#7d8cc4', vertexColors: true, transparent: true, opacity: 0.18, depthWrite: false }),
   );
   scene.add(orbit);
 
@@ -404,6 +404,22 @@ function setOrbitGeometry(p) {
   const v = new THREE.Vector3();
   for (let i = 0; i <= 128; i++) pts.push(orbitPoint(p, (i / 128) * Math.PI * 2, v).clone());
   p.orbit.geometry.setFromPoints(pts);
+  p.orbit.geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(pts.length * 3).fill(1), 3));
+}
+
+// the orbit line glows brightest right behind its planet and fades along the path it has already travelled
+function shadeOrbit(p) {
+  const col = p.orbit.geometry.attributes.color;
+  if (!col) return;
+  const n = col.count - 1;
+  const TAU = Math.PI * 2;
+  const head = ((p.angle % TAU) + TAU) % TAU;
+  for (let i = 0; i <= n; i++) {
+    const behind = (((head - (i / n) * TAU) % TAU) + TAU) % TAU / TAU; // 0 at the planet, →1 all the way round
+    const v = 0.3 + 0.7 * (1 - behind) ** 4;
+    col.setXYZ(i, v, v, v);
+  }
+  col.needsUpdate = true;
 }
 
 // planet size follows how much Claude has written in the session (output tokens)
@@ -656,7 +672,8 @@ function animate(now = 0) {
     p.sel.position.copy(p.group.position);
     p.sel.quaternion.copy(camera.quaternion);
     p.sel.scale.setScalar(p.size * 1.45);
-    p.orbit.material.opacity = p.id === selected ? 0.55 : 0.18;
+    shadeOrbit(p);
+    p.orbit.material.opacity = p.id === selected ? 0.7 : 0.3;
     p.orbit.material.color.copy(p.id === selected ? ORBIT.selected : ORBIT.line);
 
     // comet trail
