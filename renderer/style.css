@@ -2602,3 +2602,8 @@ body.overheat .rail .logo {
   color: var(--text-3);
   font-weight: 600;
 }
+
+/* keyboard shortcut pickers in Settings */
+.key-set { display: flex; gap: 8px; align-items: center; }
+.key-btn { min-width: 130px; font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace; }
+.key-btn.capturing { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }

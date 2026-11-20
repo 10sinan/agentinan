@@ -30,6 +30,9 @@ const DEFAULTS = {
   hogIgnore: [],
   notifyLimits: true, // when the 5-hour or weekly limit passes 80% and 95%
   trayKeep: true, // closing the window leaves Agentinan running in the tray
+  restoreOwn: true, // resume the sessions Agentinan ran itself when it starts again
+  restoreShells: true, // reopen the drawer's terminals (same folders, fresh shells) when it starts again
+  keys: { dock: 'Ctrl+`', newSession: 'Ctrl+Shift+N' }, // keyboard shortcuts, changeable in Settings
 };
 
 let win = null;
@@ -180,6 +183,8 @@ function annotate(snap) {
 }
 // Sessions Agentinan runs itself end with the app; remember them so the next start can resume them.
 const ownFile = () => path.join(app.getPath('userData'), 'own-sessions.json');
+const shellsFile = () => path.join(app.getPath('userData'), 'shells.json');
+let pendingShells = []; // folders of the drawer's terminals from last time; the page asks for them once
 function saveOwnSessions() {
   if (!lastSnap) return; // never polled (e.g. a second instance that quit at once): keep the saved list
   try {
@@ -189,6 +194,11 @@ function saveOwnSessions() {
   } catch (e) {
     console.error('own sessions not saved', e);
   }
+  try {
+    fs.writeFileSync(shellsFile(), JSON.stringify(shells.cwds()));
+  } catch (e) {
+    console.error('terminals not saved', e);
+  }
 }
 function restoreOwnSessions() {
   let list = [];
@@ -196,7 +206,12 @@ function restoreOwnSessions() {
     list = JSON.parse(fs.readFileSync(ownFile(), 'utf8'));
     fs.unlinkSync(ownFile());
   } catch {}
-  if (Array.isArray(list)) for (const s of list.slice(0, 20)) terminals.resume(s?.id, s?.cwd);
+  if (settings.restoreOwn !== false && Array.isArray(list)) for (const s of list.slice(0, 20)) terminals.resume(s?.id, s?.cwd);
+  try {
+    const cwds = JSON.parse(fs.readFileSync(shellsFile(), 'utf8'));
+    fs.unlinkSync(shellsFile());
+    if (settings.restoreShells !== false && Array.isArray(cwds)) pendingShells = cwds.filter((c) => typeof c === 'string').slice(0, 10);
+  } catch {}
 }
 let prev = null; // sessionId → status from the last poll
 let lastSnap = null;
@@ -407,6 +422,7 @@ if (!app.requestSingleInstanceLock()) {
         return settings;
       }),
     );
+    ipcMain.handle('shell:restore', () => pendingShells.splice(0));
     ipcMain.handle('shell:open', wrap((cwd) => shells.open(cwd)));
     ipcMain.on('shell:input', (_e, { id, data }) => shells.write(String(id), data));
     ipcMain.on('shell:resize', (_e, { id, cols, rows }) => shells.resize(String(id), cols | 0, rows | 0));

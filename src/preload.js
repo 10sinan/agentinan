@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('agentinan', {
   resize: (key, cols, rows) => ipcRenderer.send('term:resize', { key, cols, rows }),
   // plain shells in the bottom drawer
   shellOpen: (cwd) => ipcRenderer.invoke('shell:open', cwd), // → { data: { id, cwd, name } } or { error }
+  shellRestore: () => ipcRenderer.invoke('shell:restore'), // folders of last time's terminals, once per start
   shellInput: (id, data) => ipcRenderer.send('shell:input', { id, data }),
   shellResize: (id, cols, rows) => ipcRenderer.send('shell:resize', { id, cols, rows }),
   shellClose: (id) => ipcRenderer.send('shell:close', id),

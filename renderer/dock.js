@@ -1,6 +1,6 @@
 'use strict';
 // The terminal drawer at the bottom of the window: ordinary shells (not Claude sessions) for running a project.
-// Ctrl+` (or the button in the top bar) opens and closes it; the shells keep running while it is closed.
+// A shortcut (Ctrl+` by default, see Settings) or the button in the top bar opens and closes it; the shells keep running while it is closed.
 (() => {
   const api = window.agentinan;
   const D = window.dash;
@@ -63,8 +63,8 @@
 
   const early = new Map(); // output that arrives before the terminal exists on this side
 
-  async function newShell() {
-    const res = await api.shellOpen(projectCwd());
+  async function newShell(cwd) {
+    const res = await api.shellOpen(typeof cwd === 'string' ? cwd : projectCwd());
     if (!res || res.error) return void D.toast('Terminal açılamadı' + (res && res.error ? ': ' + res.error : ''));
     const r = res.data;
     lastCwd = r.cwd;
@@ -117,13 +117,12 @@
 
   $('dockBtn').onclick = toggle;
   $('dockHide').onclick = () => setOpen(false);
-  document.addEventListener('keydown', (e) => {
-    if (e.ctrlKey && (e.key === '`' || e.code === 'Backquote')) {
-      e.preventDefault();
-      e.stopPropagation(); // the terminal itself would otherwise take the key
-      toggle();
-    }
-  }, true);
+  window.toggleDock = toggle; // the shortcut (set in Settings, handled in app.js) calls this
+
+  // terminals that were open when Agentinan last quit: same folders, fresh shells
+  api.shellRestore().then(async (cwds) => {
+    for (const c of cwds || []) await newShell(c);
+  });
 
   $('dockTabs').addEventListener('click', (e) => {
     const close = e.target.closest('[data-close]');

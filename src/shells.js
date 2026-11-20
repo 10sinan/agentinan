@@ -46,6 +46,11 @@ class Shells {
     return { id, cwd: dir, name: path.basename(dir) || dir };
   }
 
+  // Folders of the open shells, saved on quit so the next start can reopen them.
+  cwds() {
+    return [...this.shells.values()].map((s) => s.cwd);
+  }
+
   write(id, data) {
     this.shells.get(id)?.proc.write(String(data));
   }

@@ -609,6 +609,9 @@ function applySettings() {
   $('nWaiting').checked = settings.notifyWaiting;
   $('nDone').checked = settings.notifyDone;
   $('trayKeep').checked = settings.trayKeep !== false;
+  $('restoreOwn').checked = settings.restoreOwn !== false;
+  $('restoreShells').checked = settings.restoreShells !== false;
+  renderKeys();
   for (const b of document.querySelectorAll('#quality button')) b.classList.toggle('active', b.dataset.q === settings.quality);
   document.body.classList.toggle('low', settings.quality === 'low');
   if (settings.theme !== window.themes.current().id) window.themes.apply(settings.theme);
@@ -647,6 +650,69 @@ window.addEventListener('dash:settings-reload', async () => {
   applySettings();
 });
 api.onSettingsChanged(() => window.dispatchEvent(new Event('dash:settings-reload'))); // changed from the tray menu
+$('restoreOwn').onchange = () => saveSettings({ restoreOwn: $('restoreOwn').checked });
+$('restoreShells').onchange = () => saveSettings({ restoreShells: $('restoreShells').checked });
+
+// ---------- keyboard shortcuts ----------
+const KEY_DEFAULTS = { dock: 'Ctrl+`', newSession: 'Ctrl+Shift+N' };
+const KEY_ACTIONS = {
+  dock: () => window.toggleDock && window.toggleDock(),
+  newSession: () => window.openNewSession && window.openNewSession(),
+};
+const keyOf = (name) => (settings.keys && settings.keys[name]) || KEY_DEFAULTS[name];
+// "Ctrl+Shift+N" for a key event; null for a bare modifier press
+function comboOf(e) {
+  if (['Control', 'Shift', 'Alt', 'Meta', 'AltGraph'].includes(e.key)) return null;
+  let k = e.code.startsWith('Key') ? e.code.slice(3) : e.code.startsWith('Digit') ? e.code.slice(5) : e.code === 'Backquote' ? '`' : e.key.length === 1 ? e.key.toUpperCase() : e.key;
+  if (k === ' ') k = 'Space';
+  return [e.ctrlKey && 'Ctrl', e.altKey && 'Alt', e.shiftKey && 'Shift', e.metaKey && 'Meta', k].filter(Boolean).join('+');
+}
+let capturing = null; // the action whose key is being picked
+function renderKeys() {
+  for (const b of document.querySelectorAll('.key-btn')) {
+    const n = b.dataset.key;
+    b.classList.toggle('capturing', capturing === n);
+    b.textContent = capturing === n ? 'Tuşlara bas…' : keyOf(n);
+  }
+}
+document.addEventListener(
+  'keydown',
+  (e) => {
+    if (capturing) {
+      e.preventDefault();
+      e.stopPropagation();
+      const n = capturing;
+      if (e.key === 'Escape') capturing = null;
+      else {
+        const c = comboOf(e);
+        if (!c) return;
+        if (!/^(Ctrl|Alt|Meta)\+/.test(c) && !/^F\d+$/.test(c)) return toast('Ctrl, Alt ya da Meta ile birlikte bir tuş seç (ya da F1–F12)');
+        const other = Object.keys(KEY_DEFAULTS).find((x) => x !== n && keyOf(x) === c);
+        if (other) return toast('Bu kısayol başka bir işlemde kullanılıyor');
+        capturing = null;
+        saveSettings({ keys: { ...KEY_DEFAULTS, ...(settings.keys || {}), [n]: c } });
+      }
+      return renderKeys();
+    }
+    const c = comboOf(e);
+    if (!c) return;
+    const n = Object.keys(KEY_ACTIONS).find((x) => keyOf(x) === c);
+    if (!n) return;
+    e.preventDefault();
+    e.stopPropagation(); // a terminal would otherwise take the key
+    KEY_ACTIONS[n]();
+  },
+  true,
+);
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('.key-btn');
+  const reset = e.target.closest('[data-key-reset]');
+  if (b) capturing = capturing === b.dataset.key ? null : b.dataset.key;
+  else if (reset) saveSettings({ keys: { ...KEY_DEFAULTS, ...(settings.keys || {}), [reset.dataset.keyReset]: KEY_DEFAULTS[reset.dataset.keyReset] } });
+  else if (capturing) capturing = null;
+  else return;
+  renderKeys();
+});
 $('trayKeep').onchange = () => saveSettings({ trayKeep: $('trayKeep').checked });
 $('quality').addEventListener('click', (e) => {
   const q = e.target.closest('button')?.dataset.q;
