@@ -62,9 +62,13 @@ function createWindow() {
     backgroundColor: '#070a14',
     title: 'Agentinan',
     icon: path.join(__dirname, '..', 'renderer', 'icon.png'),
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+  // The page never navigates and never opens windows: whatever tries to is refused.
+  win.webContents.on('will-navigate', (e) => e.preventDefault());
+  win.webContents.on('will-redirect', (e) => e.preventDefault());
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   win.webContents.on('console-message', (e) => {
     if (e.level === 'warning' || e.level === 'error') console.error(`[page] ${e.message} (${e.sourceId}:${e.lineNumber})`);
   });
