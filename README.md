@@ -65,6 +65,7 @@ npm install
 npm start
 npm run dist           # paketler: dist/ altında AppImage ve RPM
 ./install-desktop.sh   # isteğe bağlı: uygulamalar menüsüne ekler
+sh scripts/make-icon.sh  # ikonu build/icon-source.png çiziminden yeniden üretir (ImageMagick gerekir)
 ```
 
 `node scripts/check.js` Electron açmadan tek bir anlık görüntü yazdırır. Gerçek `~/.claude` verisini elle kontrol etmek için kullanılır.
