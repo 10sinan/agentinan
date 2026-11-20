@@ -34,7 +34,7 @@
           <div class="limits" id="limits"></div>
           <div class="today" id="today"></div>
           <button class="btn waitq-btn" id="waitBtn" hidden title="Onay ya da cevap bekleyen oturumlar"><i data-icon="bell"></i>Bekleyen <b id="waitN">0</b></button>
-          <button class="btn" id="dockBtn" title="Terminal çekmecesi (Ctrl+`)"><i data-icon="terminal"></i>Terminal</button>
+          <button class="btn" id="dockBtn" title="Terminal çekmecesi"><i data-icon="terminal"></i>Terminal</button>
           <button class="btn primary" id="newBtn" title="Agentinan'dan başlatılan oturumlara komut verebilirsin"><i data-icon="plus"></i>Yeni oturum</button>
         </header>
         <div class="waitq glass" id="waitPanel" hidden></div>
@@ -143,6 +143,28 @@
                 <div><b>Kapatınca tepside kalsın</b><span>Pencereyi kapatınca Agentinan sistem tepsisinde çalışmaya devam eder, bildirimler gelmeye devam eder. Tamamen çıkmak için tepsi menüsünden Çıkış.</span></div>
                 <input type="checkbox" class="switch" id="trayKeep" />
               </label>
+            </div>
+            <div class="set-group">
+              <h3><i data-icon="refresh"></i>Açılışta geri getir</h3>
+              <label class="set-row">
+                <div><b>Oturumları geri getir</b><span>Agentinan'ın kendi çalıştırdığı oturumlar (güvenilmeyen klasörler) uygulama kapanınca biter. Açılışta <code>claude --resume</code> ile kaldıkları yerden yeniden başlar.</span></div>
+                <input type="checkbox" class="switch" id="restoreOwn" />
+              </label>
+              <label class="set-row">
+                <div><b>Terminalleri geri getir</b><span>Alttaki çekmecedeki terminaller aynı klasörlerde yeniden açılır. İçerikleri ve çalışan komutlar geri gelmez.</span></div>
+                <input type="checkbox" class="switch" id="restoreShells" />
+              </label>
+            </div>
+            <div class="set-group">
+              <h3><i data-icon="terminal"></i>Klavye kısayolları</h3>
+              <div class="set-row">
+                <div><b>Terminal çekmecesini aç / kapat</b><span>Sağ üstteki Terminal düğmesi</span></div>
+                <div class="key-set"><button class="btn sm key-btn" data-key="dock"></button><button class="btn sm ghost" data-key-reset="dock" title="Varsayılana dön">Sıfırla</button></div>
+              </div>
+              <div class="set-row">
+                <div><b>Yeni oturum aç</b><span>Sağ üstteki Yeni oturum düğmesi</span></div>
+                <div class="key-set"><button class="btn sm key-btn" data-key="newSession"></button><button class="btn sm ghost" data-key-reset="newSession" title="Varsayılana dön">Sıfırla</button></div>
+              </div>
             </div>
             <div class="set-group">
               <h3><i data-icon="zap"></i>Kullanım limitleri</h3>
