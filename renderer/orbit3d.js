@@ -149,13 +149,14 @@ function surfaceTexture(seed, banded, hue = null) {
   return t;
 }
 
+// the sun is the light source: its body, halos and corona ignore the fog so it stays bright from far away
 const sunGroup = new THREE.Group();
 const sunMesh = new THREE.Mesh(
   new THREE.SphereGeometry(30, 48, 32),
-  new THREE.MeshBasicMaterial({ map: surfaceTexture(7, false), color: new THREE.Color('#ffb340').multiplyScalar(1.6) }),
+  new THREE.MeshBasicMaterial({ map: surfaceTexture(7, false), color: new THREE.Color('#ffb340').multiplyScalar(1.6), fog: false }),
 );
 sunGroup.add(sunMesh);
-const sunHalo = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: '#ff9a2e', transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
+const sunHalo = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: '#ff9a2e', transparent: true, opacity: 0.55, depthWrite: false, fog: false, blending: THREE.AdditiveBlending }));
 sunHalo.scale.setScalar(190);
 sunGroup.add(sunHalo);
 scene.add(sunGroup);
@@ -192,10 +193,10 @@ function coronaTexture() {
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
-const corona = new THREE.Sprite(new THREE.SpriteMaterial({ map: coronaTexture(), color: '#ffb340', transparent: true, opacity: 0.32, depthWrite: false, blending: THREE.AdditiveBlending }));
+const corona = new THREE.Sprite(new THREE.SpriteMaterial({ map: coronaTexture(), color: '#ffb340', transparent: true, opacity: 0.32, depthWrite: false, fog: false, blending: THREE.AdditiveBlending }));
 corona.scale.setScalar(230);
 sunGroup.add(corona);
-const sunHalo2 = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: '#ffe2a8', transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
+const sunHalo2 = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: '#ffe2a8', transparent: true, opacity: 0.55, depthWrite: false, fog: false, blending: THREE.AdditiveBlending }));
 sunHalo2.scale.setScalar(80);
 sunGroup.add(sunHalo2);
 
