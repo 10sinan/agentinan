@@ -497,6 +497,30 @@ textarea:focus {
   display: flex;
   gap: 8px;
 }
+.map-card .mc-send {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.map-card .mc-send input {
+  flex: 1;
+  min-width: 0;
+}
+.btn.icon-only {
+  padding: 3px 6px;
+}
+.btn.danger {
+  color: #fff;
+  background: #c0392b;
+  border-color: #e5604f;
+}
+.btn .ico {
+  margin-right: 4px;
+}
+.btn.icon-only .ico,
+.mc-send .btn .ico {
+  margin-right: 0;
+}
 
 .legend {
   position: absolute;

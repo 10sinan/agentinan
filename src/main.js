@@ -199,14 +199,6 @@ if (!app.requestSingleInstanceLock()) {
         return { error: e.message || String(e) };
       }
     });
-    ipcMain.handle('session:stop', (_e, key) => terminals.stop(String(key)));
-    ipcMain.handle('term:attach', (_e, key) => {
-      try {
-        return terminals.attach(String(key));
-      } catch (e) {
-        return { error: e.message };
-      }
-    });
     // Source Control: every call answers { data } or { error }.
     const wrap = (fn) => async (_e, ...args) => {
       try {
@@ -215,6 +207,54 @@ if (!app.requestSingleInstanceLock()) {
         return { error: e.message || String(e) };
       }
     };
+    ipcMain.handle('session:stop', (_e, key) => terminals.stop(String(key)));
+    const liveSession = (id) => {
+      const s = lastSnap && lastSnap.sessions.find((x) => x.id === id);
+      if (!s) throw new Error('Oturum bulunamadı');
+      return s;
+    };
+    ipcMain.handle(
+      'session:rename',
+      wrap((id, title) => {
+        const s = liveSession(String(id));
+        const name = collector.rename(s.id, s.cwd, title);
+        setTimeout(poll, 300);
+        return name;
+      }),
+    );
+    // Closes the session (if it is still running) and deletes its conversation for good.
+    ipcMain.handle(
+      'session:delete',
+      wrap(async (id) => {
+        const s = liveSession(String(id));
+        if (s.control) terminals.stop(s.control);
+        else {
+          try {
+            process.kill(s.pid, 'SIGTERM');
+          } catch {}
+        }
+        const alive = () => {
+          try {
+            process.kill(s.pid, 0);
+            return true;
+          } catch {
+            return false;
+          }
+        };
+        for (let i = 0; i < 30 && alive(); i++) await new Promise((r) => setTimeout(r, 200)); // it would rewrite the file while it lives
+        if (alive()) throw new Error('Oturum kapanmadı; sohbet silinmedi');
+        collector.deleteSession(s.id, s.cwd);
+        setTimeout(poll, 300);
+        return true;
+      }),
+    );
+    ipcMain.handle('term:attach', (_e, key) => {
+      try {
+        return terminals.attach(String(key));
+      } catch (e) {
+        return { error: e.message };
+      }
+    });
     ipcMain.handle(
       'git:repos',
       wrap(() => gitApi.repos([...(lastSnap ? lastSnap.sessions.map((s) => s.cwd) : []), ...settings.gitRepos])),

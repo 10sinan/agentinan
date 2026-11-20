@@ -1,4 +1,5 @@
-// Reads Claude Code's own files under ~/.claude (read only) and turns them into a snapshot for the UI.
+// Reads Claude Code's own files under ~/.claude and turns them into a snapshot for the UI. The only writes are the ones
+// the user asks for: rename() appends a title record to a transcript, deleteSession() removes a transcript.
 //   sessions/<pid>.json                      one per running Claude Code process: cwd, status (busy / idle / waiting)
 //   projects/<dir>/<sessionId>.jsonl          the transcript: prompts, replies with token usage, tool calls
 //   projects/<dir>/<sessionId>/subagents/     each subagent's own transcript and a .meta.json
@@ -255,6 +256,44 @@ class Collector {
     if (!t) this.transcripts.set(file, (t = new Transcript(file)));
     t.update();
     return t;
+  }
+
+  // Renames a conversation the way Claude Code's own /rename does: a custom-title record at the end of its transcript.
+  rename(sid, cwd, title) {
+    const name = String(title || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+    if (!name) throw new Error('İsim boş olamaz');
+    const file = this.transcriptFor(sid, cwd);
+    const fd = fs.openSync(file, 'a+');
+    try {
+      const size = fs.fstatSync(fd).size;
+      let lead = '';
+      if (size) {
+        const b = Buffer.alloc(1);
+        fs.readSync(fd, b, 0, 1, size - 1);
+        if (b[0] !== 10) lead = '\n'; // never glue onto an unfinished line
+      }
+      fs.writeSync(fd, lead + JSON.stringify({ type: 'custom-title', customTitle: name, sessionId: sid }) + '\n');
+    } finally {
+      fs.closeSync(fd);
+    }
+    return name;
+  }
+
+  // Permanently removes a conversation: its transcript and the folder holding its subagents' transcripts.
+  deleteSession(sid, cwd) {
+    const file = this.transcriptFor(sid, cwd);
+    fs.rmSync(file, { force: true });
+    fs.rmSync(file.replace(/\.jsonl$/, ''), { recursive: true, force: true });
+    this.transcripts.delete(file);
+    this.fileOf.delete(sid);
+  }
+
+  // The transcript of a session id, checked to really live under projects/ (the id comes from the UI).
+  transcriptFor(sid, cwd) {
+    if (!/^[A-Za-z0-9_-]+$/.test(String(sid))) throw new Error('Geçersiz oturum kimliği');
+    const file = this.findTranscript(sid, cwd);
+    if (!file || !path.resolve(file).startsWith(PROJ_DIR + path.sep)) throw new Error('Sohbet dosyası bulunamadı');
+    return file;
   }
 
   findTranscript(sid, cwd) {

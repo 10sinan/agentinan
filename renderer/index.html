@@ -235,6 +235,19 @@
       </form>
     </div>
 
+    <div class="modal" id="renameModal" hidden>
+      <form class="modal-box glass" id="renameForm">
+        <h2>Sohbetin adını değiştir</h2>
+        <p class="modal-sub">Yeni ad Claude Code'un kendi sohbet listesinde (<code>/resume</code>) de görünür.</p>
+        <input id="renameInput" maxlength="80" placeholder="sohbet adı" />
+        <div class="modal-err" id="renameErr"></div>
+        <div class="modal-actions">
+          <button type="button" class="btn ghost" id="renameCancel">İptal</button>
+          <button type="submit" class="btn primary" id="renameGo">Kaydet</button>
+        </div>
+      </form>
+    </div>
+
     <script src="../node_modules/@xterm/xterm/lib/xterm.js"></script>
     <script src="../node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
     <script src="icons.js"></script>

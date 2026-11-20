@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('agentinan', {
   pickFolder: () => ipcRenderer.invoke('pick-folder'),
   startSession: (opts) => ipcRenderer.invoke('session:start', opts),
   stopSession: (key) => ipcRenderer.invoke('session:stop', key),
+  renameSession: (id, title) => ipcRenderer.invoke('session:rename', id, title), // → { data } or { error }
+  deleteSession: (id) => ipcRenderer.invoke('session:delete', id),
   attach: (key) => ipcRenderer.invoke('term:attach', key),
   input: (key, data) => ipcRenderer.send('term:input', { key, data }),
   sendLine: (key, text) => ipcRenderer.send('term:line', { key, text }),
