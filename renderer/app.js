@@ -414,6 +414,76 @@ async function askDelete(s) {
   api.refresh();
 }
 
+// ---------- drag & drop on the map: nothing happens without a button press here ----------
+const dropModal = $('dropModal');
+let dropCtx = null; // { a, b? } session ids
+const closeDrop = () => {
+  dropModal.hidden = true;
+  dropCtx = null;
+};
+const oneLine = (t) => String(t || '').replace(/\s+/g, ' ').trim();
+
+window.addEventListener('dash:drop', (e) => {
+  const a = snap.sessions.find((s) => s.id === e.detail.id);
+  if (!a) return;
+  const box = $('dropBox');
+  if (e.detail.target === 'sun') {
+    dropCtx = { a: a.id };
+    const off = !a.control;
+    box.innerHTML = `
+      <h2>${esc(a.name)} güneşe bırakıldı</h2>
+      <p class="modal-sub">Bu oturumla ne yapılsın?</p>
+      ${off ? `<p class="drop-note">${icon('eye')}Bu oturum Agentinan dışında açıldı; ona buradan komut gönderilemez.</p>` : ''}
+      <div class="drop-choices">
+        <button class="drop-choice" data-act="esc" ${off ? 'disabled' : ''}>${icon('minus')}<b>Durdur</b><span>Claude'a Esc gönderir: yaptığı işi keser, oturum açık kalır.</span></button>
+        <button class="drop-choice danger" data-act="stop" ${off ? 'disabled' : ''}>${icon('power')}<b>Oturumu kapat</b><span>Oturum sonlanır. Sohbet silinmez; <code>claude --resume</code> ile devam edilebilir.</span></button>
+      </div>
+      <div class="modal-actions"><button class="btn ghost" data-act="cancel">İptal</button></div>`;
+  } else {
+    const b = snap.sessions.find((s) => s.id === e.detail.target);
+    if (!b) return;
+    dropCtx = { a: a.id, b: b.id };
+    const text = a.lastText ? `"${oneLine(a.name)}" oturumunun son cevabı: ${oneLine(a.lastText)}` : '';
+    box.innerHTML = `
+      <h2>${esc(a.name)} <span class="drop-arrow">→</span> ${esc(b.name)}</h2>
+      <p class="modal-sub">${esc(a.name)} oturumunun son cevabı ${esc(b.name)} oturumuna komut olarak gönderilecek. Göndermeden önce düzenleyebilirsin.</p>
+      ${!b.control ? `<p class="drop-note">${icon('eye')}${esc(b.name)} Agentinan dışında açıldı; ona komut gönderilemez.</p>` : ''}
+      ${!a.lastText ? `<p class="drop-note">${esc(a.name)} henüz bir cevap yazmadı; göndermek istediğini kendin yaz.</p>` : ''}
+      <textarea id="dropText" rows="6" maxlength="4000" spellcheck="false">${esc(text)}</textarea>
+      <div class="modal-actions">
+        <button class="btn ghost" data-act="cancel">İptal</button>
+        <button class="btn primary" data-act="send" ${b.control ? '' : 'disabled'}>${icon('send')}${esc(b.name)} oturumuna gönder</button>
+      </div>`;
+  }
+  dropModal.hidden = false;
+  (box.querySelector('textarea:not([disabled])') || box.querySelector('[data-act="cancel"]')).focus();
+});
+
+dropModal.addEventListener('click', (e) => {
+  if (e.target === dropModal) return closeDrop();
+  const act = e.target.closest('button')?.dataset.act;
+  if (!act || !dropCtx) return;
+  if (act === 'cancel') return closeDrop();
+  const a = snap.sessions.find((s) => s.id === dropCtx.a);
+  if (act === 'esc' && a?.control) {
+    api.input(a.control, '\x1b');
+    toast(`${a.name}: Esc gönderildi`);
+  }
+  if (act === 'stop' && a?.control) {
+    api.stopSession(a.control);
+    toast(`${a.name} kapatılıyor`);
+  }
+  if (act === 'send') {
+    const b = snap.sessions.find((s) => s.id === dropCtx.b);
+    const text = oneLine($('dropText').value); // one line: a newline would act as Enter half way through
+    if (!b?.control || !text) return;
+    api.sendLine(b.control, text);
+    toast(`${b.name} oturumuna gönderildi`);
+  }
+  closeDrop();
+});
+document.addEventListener('keydown', (e) => e.key === 'Escape' && !dropModal.hidden && closeDrop());
+
 // Rename dialog (window.prompt does not exist in Electron).
 const renameModal = $('renameModal');
 let renaming = null;

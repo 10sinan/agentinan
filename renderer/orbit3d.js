@@ -734,12 +734,45 @@ window.addEventListener('pointermove', (e) => {
     if (dragPoint.length() > 900) dragPoint.setLength(900); // never lose a planet off the map
     drag.p.phys.target.copy(dragPoint);
   }
+  dropHover = dropTargetOf(drag.p);
 });
-const endDrag = () => {
+// What a dragged planet is over: 'sun', another planet's id, or null. Dropping there asks what to do (app.js).
+let dropHover = null;
+// Measured on screen, where the user sees the overlap (the 3D depth of tilted orbits would mislead).
+const scrA = new THREE.Vector3();
+function onScreen(pos, radius) {
+  const h = host.clientHeight;
+  const dist = camera.position.distanceTo(pos);
+  scrA.copy(pos).project(camera);
+  return { x: ((scrA.x + 1) / 2) * host.clientWidth, y: ((1 - scrA.y) / 2) * h, r: (radius * h) / 2 / (Math.tan((camera.fov * Math.PI) / 360) * dist) };
+}
+function dropTargetOf(p) {
+  const me = onScreen(p.group.position, p.size);
+  const sun = onScreen(tmp.set(0, 0, 0), 30);
+  if (Math.hypot(me.x - sun.x, me.y - sun.y) < sun.r * 1.5 + me.r * 0.5) return 'sun';
+  let best = null;
+  let bestD = Infinity;
+  for (const q of planets.values()) {
+    if (q === p) continue;
+    const o = onScreen(q.group.position, q.size);
+    const d = Math.hypot(me.x - o.x, me.y - o.y);
+    if (d < (me.r + o.r) * 1.1 && d < bestD) {
+      best = q.id;
+      bestD = d;
+    }
+  }
+  return best;
+}
+const endDrag = (e) => {
   if (!drag) return;
-  drag.p.phys.held = false;
+  const { p, active } = drag;
+  p.phys.held = false;
   drag = null;
+  dropHover = null;
   labels.domElement.style.cursor = 'grab';
+  if (!active || e.type !== 'pointerup') return; // a cancelled drag or a lost window never acts
+  const target = dropTargetOf(p);
+  if (target) window.dispatchEvent(new CustomEvent('dash:drop', { detail: { id: p.id, target } }));
 };
 window.addEventListener('pointerup', endDrag);
 window.addEventListener('pointercancel', endDrag);
@@ -826,7 +859,8 @@ function animate(now = 0) {
 
   sunMesh.rotation.y += dt * 0.05;
   const busy = [...planets.values()].some((p) => p.status === 'busy');
-  sunHalo.scale.setScalar(190 + Math.sin(t * (busy ? 2.4 : 0.9)) * (busy ? 14 : 5));
+  sunHalo.scale.setScalar((dropHover === 'sun' ? 260 : 190) + Math.sin(t * (busy ? 2.4 : 0.9)) * (busy ? 14 : 5));
+  sunHalo.material.opacity += ((dropHover === 'sun' ? 0.95 : 0.55) - sunHalo.material.opacity) * Math.min(1, dt * 8);
   stars.rotation.y += dt * 0.004;
   corona.material.rotation += dt * 0.025;
   corona.material.opacity = (busy ? 0.42 : 0.3) + Math.sin(t * 1.3) * 0.04;
@@ -896,7 +930,7 @@ function animate(now = 0) {
     } else p.shock.material.opacity = 0;
 
     // selection / hover ring
-    const on = p.id === selected || p.id === hoverId;
+    const on = p.id === selected || p.id === hoverId || p.id === dropHover;
     p.sel.material.opacity += ((on ? 0.9 : 0) - p.sel.material.opacity) * Math.min(1, dt * 8);
     p.sel.position.copy(p.group.position);
     p.sel.quaternion.copy(camera.quaternion);
