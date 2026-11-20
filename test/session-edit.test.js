@@ -62,3 +62,47 @@ test('deleteSession removes the transcript and its subagent folder, and nothing 
   assert.ok(fs.existsSync(other));
   assert.throws(() => c.deleteSession(SID, cwd), /bulunamadı/); // already gone
 });
+
+test('rename and deleteSession refuse a transcript that is a symlink to a file outside projects/', () => {
+  fresh(prompt + '\n');
+  const victim = path.join(home, 'victim.jsonl'); // outside projects/
+  fs.writeFileSync(victim, 'keep\n');
+  fs.rmSync(file);
+  fs.symlinkSync(victim, file);
+  const c = new Collector();
+  assert.throws(() => c.rename(SID, cwd, 'x'), /bulunamadı/);
+  assert.throws(() => c.deleteSession(SID, cwd), /bulunamadı/);
+  assert.strictEqual(fs.readFileSync(victim, 'utf8'), 'keep\n');
+});
+
+test('deleteSession only unlinks a subagent folder that is a symlink to elsewhere', () => {
+  fresh(prompt + '\n');
+  const other = path.join(home, 'other-dir');
+  fs.mkdirSync(other, { recursive: true });
+  fs.writeFileSync(path.join(other, 'precious.txt'), 'keep');
+  fs.rmSync(path.join(projDir, SID), { recursive: true });
+  fs.symlinkSync(other, path.join(projDir, SID));
+  new Collector().deleteSession(SID, cwd);
+  assert.ok(!fs.existsSync(file));
+  assert.ok(!fs.existsSync(path.join(projDir, SID)));
+  assert.strictEqual(fs.readFileSync(path.join(other, 'precious.txt'), 'utf8'), 'keep');
+});
+
+test('snapshot ignores session files with a bad pid or id and cleans status and job id', () => {
+  const dir = path.join(home, 'sessions');
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.mkdirSync(dir, { recursive: true });
+  const base = { sessionId: SID, cwd, startedAt: 1 };
+  fs.writeFileSync(path.join(dir, 'a.json'), JSON.stringify({ ...base, pid: process.pid, status: '"><img src=x onerror=alert(1)>', jobId: '../../x' }));
+  fs.writeFileSync(path.join(dir, 'b.json'), JSON.stringify({ ...base, pid: '../../etc/passwd' })); // not a number
+  fs.writeFileSync(path.join(dir, 'c.json'), JSON.stringify({ ...base, pid: process.pid, sessionId: '../../evil' })); // not an id
+  fs.writeFileSync(path.join(dir, 'd.json'), JSON.stringify({ ...base, pid: -5 }));
+  const snap = new Collector().snapshot();
+  assert.strictEqual(snap.sessions.length, 1);
+  assert.strictEqual(snap.sessions[0].status, 'idle');
+  assert.strictEqual(snap.sessions[0].jobId, null);
+  fs.writeFileSync(path.join(dir, 'a.json'), JSON.stringify({ ...base, pid: process.pid, status: 'waiting', jobId: 'job_1-a' }));
+  const ok = new Collector().snapshot().sessions[0];
+  assert.strictEqual(ok.status, 'waiting');
+  assert.strictEqual(ok.jobId, 'job_1-a');
+});

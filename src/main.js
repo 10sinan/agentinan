@@ -9,6 +9,9 @@ const { Git } = require('./git');
 const { Monitor } = require('./monitor');
 const { Limits } = require('./limits');
 const { trayIcon } = require('./trayicon');
+const { guardIpc } = require('./ipc-guard');
+const { isDirectory } = require('./safepath');
+const { sanitize } = require('./settings-schema');
 
 app.commandLine.appendSwitch('ozone-platform-hint', 'auto'); // native Wayland when available (Fedora's default session)
 // One data folder (~/.config/agentinan) for both `npm start` and the packaged app, whose name is "Agentinan":
@@ -41,7 +44,7 @@ const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
 
 function loadSettings() {
   try {
-    settings = { ...DEFAULTS, ...JSON.parse(fs.readFileSync(settingsFile(), 'utf8')) };
+    settings = { ...DEFAULTS, ...sanitize(JSON.parse(fs.readFileSync(settingsFile(), 'utf8')), { internal: true }) };
   } catch {}
 }
 
@@ -61,11 +64,15 @@ function createWindow() {
     backgroundColor: '#070a14',
     title: 'Agentinan',
     icon: path.join(__dirname, '..', 'renderer', 'icon.png'),
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
-  win.webContents.on('console-message', (_e, level, message, line, source) => {
-    if (level >= 2) console.error(`[page] ${message} (${source}:${line})`);
+  // The page never navigates and never opens windows: whatever tries to is refused.
+  win.webContents.on('will-navigate', (e) => e.preventDefault());
+  win.webContents.on('will-redirect', (e) => e.preventDefault());
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('console-message', (e) => {
+    if (e.level === 'warning' || e.level === 'error') console.error(`[page] ${e.message} (${e.sourceId}:${e.lineNumber})`);
   });
   // with the tray on, closing the window only hides it: sessions are still watched and notifications still come
   win.on('close', (e) => {
@@ -297,14 +304,16 @@ if (!app.requestSingleInstanceLock()) {
     Menu.setApplicationMenu(null);
     loadSettings();
     limits = new Limits(app.getPath('userData'));
+    // every handler registered below (and later) only answers the app's own page
+    guardIpc(ipcMain, path.join(__dirname, '..', 'renderer', 'index.html'), (ch, url) => console.error(`ipc '${ch}' refused from ${url}`));
     ipcMain.handle('settings:get', () => settings);
     ipcMain.handle('settings:set', (_e, patch) => {
-      settings = { ...settings, ...patch };
+      settings = { ...settings, ...sanitize(patch) }; // unknown keys and bad values are dropped (settings-schema.js)
       saveSettings();
       updateTray(lastSnap, true);
       return settings;
     });
-    ipcMain.handle('open-folder', (_e, dir) => (typeof dir === 'string' && path.isAbsolute(dir) ? shell.openPath(dir) : 'bad path'));
+    ipcMain.handle('open-folder', (_e, dir) => (isDirectory(dir) ? shell.openPath(dir) : 'bad path')); // only a real directory: openPath on a file would run it
     ipcMain.handle('copy', (_e, text) => clipboard.writeText(String(text)));
     ipcMain.handle('refresh', () => poll());
     ipcMain.handle('timeline', () => collector.timeline());
@@ -435,8 +444,9 @@ if (!app.requestSingleInstanceLock()) {
     createTray();
     win.webContents.on('did-finish-load', poll);
     setInterval(poll, POLL_MS);
-    // AGENTINAN_SHOT=/path.png: save one screenshot after start-up and quit (for checking the UI).
-    if (process.env.AGENTINAN_SHOT) {
+    // AGENTINAN_SHOT=/path.png: save one screenshot after start-up and quit (for checking the UI). Development only:
+    // AGENTINAN_EVAL runs arbitrary script in the page and AGENTINAN_SHOT writes a file, so a packaged app ignores them.
+    if (!app.isPackaged && process.env.AGENTINAN_SHOT) {
       setTimeout(async () => {
         if (process.env.AGENTINAN_SELECT) win.webContents.send('select', process.env.AGENTINAN_SELECT);
         // AGENTINAN_EVAL: page script run before the screenshot, to drive the UI in a test.

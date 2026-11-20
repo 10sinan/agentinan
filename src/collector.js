@@ -7,11 +7,14 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { costOf, prettyModel } = require('./pricing');
+const { realInside } = require('./safepath');
 
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
 const SESS_DIR = path.join(CLAUDE_DIR, 'sessions');
 const PROJ_DIR = path.join(CLAUDE_DIR, 'projects');
 const CHUNK = 4 * 1024 * 1024;
+const ID_RE = /^[A-Za-z0-9_-]{1,100}$/; // session and job ids: they end up in file paths and shell arguments
+const STATUS_RE = /^[a-z][a-z0-9_-]{0,19}$/i; // busy / idle / waiting; it ends up in CSS class names
 
 const dayKey = (ms) => {
   const d = new Date(ms);
@@ -326,19 +329,29 @@ class Collector {
 
   // Permanently removes a conversation: its transcript and the folder holding its subagents' transcripts.
   deleteSession(sid, cwd) {
-    const file = this.transcriptFor(sid, cwd);
+    const cached = this.fileOf.get(sid);
+    const file = this.transcriptFor(sid, cwd); // real path, inside projects/, ends with .jsonl
     fs.rmSync(file, { force: true });
-    fs.rmSync(file.replace(/\.jsonl$/, ''), { recursive: true, force: true });
+    // the subagents' folder next to it: a symlink is only unlinked, a real folder must also resolve inside projects/
+    const dir = file.replace(/\.jsonl$/, '');
+    try {
+      if (fs.lstatSync(dir).isSymbolicLink()) fs.unlinkSync(dir);
+      else if (realInside(PROJ_DIR, dir)) fs.rmSync(dir, { recursive: true, force: true });
+    } catch {}
     this.transcripts.delete(file);
+    if (cached) this.transcripts.delete(cached);
     this.fileOf.delete(sid);
   }
 
-  // The transcript of a session id, checked to really live under projects/ (the id comes from the UI).
+  // The transcript of a session id (the id comes from the UI). Returned as a real path: symlinks resolved, and
+  // checked to lie under projects/ and to be a .jsonl file, so a link planted there can't point a write or a
+  // delete at some other file.
   transcriptFor(sid, cwd) {
     if (!/^[A-Za-z0-9_-]+$/.test(String(sid))) throw new Error('Geçersiz oturum kimliği');
     const file = this.findTranscript(sid, cwd);
-    if (!file || !path.resolve(file).startsWith(PROJ_DIR + path.sep)) throw new Error('Sohbet dosyası bulunamadı');
-    return file;
+    const real = file && realInside(PROJ_DIR, file, '.jsonl');
+    if (!real) throw new Error('Sohbet dosyası bulunamadı');
+    return real;
   }
 
   findTranscript(sid, cwd) {
@@ -531,7 +544,7 @@ class Collector {
     const sessions = [];
     for (const f of files) {
       const s = readJSON(path.join(SESS_DIR, f));
-      if (!s || !s.pid || !s.sessionId) continue;
+      if (!s || !Number.isInteger(s.pid) || s.pid <= 0 || typeof s.sessionId !== 'string' || !ID_RE.test(s.sessionId)) continue;
       const start = procStartTime(s.pid);
       if (start === null || (s.procStart && String(s.procStart) !== start)) continue; // process gone or pid reused
       const file = this.findTranscript(s.sessionId, s.cwd);
@@ -551,13 +564,13 @@ class Collector {
         title: t ? t.aiTitle : null,
         cwd,
         project: path.basename(cwd),
-        status: s.status || 'idle',
+        status: typeof s.status === 'string' && STATUS_RE.test(s.status) ? s.status : 'idle',
         waitingFor: s.waitingFor || null,
         statusSince: s.statusUpdatedAt || s.updatedAt || s.startedAt,
         startedAt: s.startedAt,
         entrypoint: s.entrypoint || '',
         kind: s.kind || 'interactive',
-        jobId: s.jobId || null,
+        jobId: typeof s.jobId === 'string' && ID_RE.test(s.jobId) ? s.jobId : null,
         version: s.version || '',
         model: t && t.model ? prettyModel(t.model) : null,
         tokens: { ...tot.usage, total: totalTokens(tot.usage) },

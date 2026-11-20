@@ -66,7 +66,7 @@ function toast(text) {
 }
 
 const statusPill = (s) =>
-  `<span class="pill ${s.status}"><i class="sdot ${s.status}"></i>${LABELS[s.status] || esc(s.status)}</span>`;
+  `<span class="pill ${esc(s.status)}"><i class="sdot ${esc(s.status)}"></i>${LABELS[s.status] || esc(s.status)}</span>`;
 
 
 
@@ -273,8 +273,8 @@ function row(s) {
   const lt = s.recentTools[s.recentTools.length - 1];
   const hog = (snap.hogs || []).find((x) => x.sessionId === s.id);
   return `
-  <div class="srow ${s.status}${s.id === selected ? ' sel' : ''}" data-id="${esc(s.id)}">
-    <span class="c-st"><i class="sdot ${s.status}"></i>${STATUS_WORD[s.status] || esc(s.status)}</span>
+  <div class="srow ${esc(s.status)}${s.id === selected ? ' sel' : ''}" data-id="${esc(s.id)}">
+    <span class="c-st"><i class="sdot ${esc(s.status)}"></i>${STATUS_WORD[s.status] || esc(s.status)}</span>
     <span class="c-nm">${esc(s.name)}${s.control ? ' <em class="tag">ctl</em>' : ''}${hog ? ' <em class="tag hot">yoruyor</em>' : ''}</span>
     <span class="c-pj" title="${esc(s.cwd)}">${esc(s.project)}</span>
     <span class="c-md">${esc(s.model || '—')}</span>
@@ -326,7 +326,7 @@ function detail(s, hog) {
         <span>toplam (önbellek dahil)</span><b>${fmtTok(s.tokens.total)}</b>
         <span>araç çağrısı</span><b>${s.toolCount}</b>
         <span>model</span><b class="model-cell">${modelPicker(s)}</b>
-        <span>pid</span><b>${s.pid}</b>
+        <span>pid</span><b>${esc(s.pid)}</b>
       </div>
       <div class="sd-path" title="${esc(s.cwd)}">${esc(s.cwd)}</div>
       <div class="sd-actions">
@@ -393,7 +393,7 @@ function renderMapCard() {
   el.dataset.id = s.id;
   el.hidden = false;
   el.innerHTML = `
-    <div class="mc-top"><i class="sdot ${s.status}"></i><span class="mc-name" title="${esc(s.name)}">${esc(s.name)}</span><button class="btn sm ghost icon-only" data-act="rename" title="Sohbetin adını değiştir">${icon('pencil')}</button>${statusPill(s)}</div>
+    <div class="mc-top"><i class="sdot ${esc(s.status)}"></i><span class="mc-name" title="${esc(s.name)}">${esc(s.name)}</span><button class="btn sm ghost icon-only" data-act="rename" title="Sohbetin adını değiştir">${icon('pencil')}</button>${statusPill(s)}</div>
     <div class="mc-meta">${esc(s.project)} · ${ago(s.statusSince)}${s.waitingFor && s.status === 'waiting' ? ' · ' + esc(s.waitingFor) : ''}</div>
     ${s.lastPrompt ? `<div class="mc-prompt">› ${esc(s.lastPrompt)}</div>` : ''}
     <div class="mc-stats">
