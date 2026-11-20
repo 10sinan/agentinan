@@ -12,6 +12,9 @@ Arayüz beş sekmeden oluşur: **Harita**, **Oturumlar**, **Terminal**, **Git** 
   - Mavi: boşta.
   - Etrafında dönen aylar: çalışan alt ajanlar.
   - Gezegenden uçuşan yazılar: o anda yapılan araç çağrıları.
+  - Aynı klasördeki oturumlar aynı rengi paylaşır: gezegenin yüzeyi o renge hafifçe boyanır, etikette de küçük bir renk noktası görünür.
+  - Aşırı ısınan gezegenin çevresinden kırmızı şok dalgaları yayılır.
+  - Süsler: güneşte korona ışınları, gezegenlerde atmosfer parıltısı, çevrede toz diski, arada bir kayan yıldız ve gezegenin arkasında solan yörünge çizgisi. **Ayarlar → Harita kalitesi → Düşük** seçilince korona, atmosfer, toz diski ve kayan yıldızlar kapanır.
 - **Oturum listesi:** Son isteğiniz, son araç çağrıları, token, tahmini maliyet, bağlam doluluğu ve alt ajanlar.
   Bir karta tıklarsanız Claude'un son cevabı açılır. Oradan klasörü açabilir ya da `claude --resume` komutunu kopyalayabilirsiniz.
 - **Bugünün toplamı:** Kapanmış oturumlar da dahil, model bazında token ve maliyet.

@@ -575,6 +575,17 @@ textarea:focus {
   backdrop-filter: blur(6px);
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35), 0 0 12px color-mix(in srgb, var(--c, var(--idle)) 14%, transparent);
 }
+.planet-label b::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: 1px;
+  background: var(--proj, transparent);
+  box-shadow: 0 0 6px var(--proj, transparent);
+}
 .planet-label b {
   display: block;
   font-size: 12.5px;
