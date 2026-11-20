@@ -171,12 +171,14 @@ function coronaTexture() {
   c.width = c.height = 256;
   const g = c.getContext('2d');
   g.translate(128, 128);
-  for (let i = 0; i < 36; i++) {
-    const a = (i / 36) * Math.PI * 2 + Math.random() * 0.1;
-    const len = 70 + Math.random() * 58;
-    const w = 0.035 + Math.random() * 0.05;
-    const grd = g.createRadialGradient(0, 0, 18, 0, 0, len);
-    grd.addColorStop(0, 'rgba(255,255,255,0.55)');
+  g.filter = 'blur(1.2px)';
+  for (let i = 0; i < 72; i++) {
+    const a = (i / 72) * Math.PI * 2 + Math.random() * 0.08;
+    const len = 52 + Math.random() * 64;
+    const w = 0.012 + Math.random() * 0.03;
+    const grd = g.createRadialGradient(0, 0, 14, 0, 0, len);
+    grd.addColorStop(0, 'rgba(255,255,255,0.28)');
+    grd.addColorStop(0.55, 'rgba(255,255,255,0.07)');
     grd.addColorStop(1, 'rgba(255,255,255,0)');
     g.fillStyle = grd;
     g.beginPath();
@@ -189,8 +191,8 @@ function coronaTexture() {
   t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
-const corona = new THREE.Sprite(new THREE.SpriteMaterial({ map: coronaTexture(), color: '#ffb340', transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending }));
-corona.scale.setScalar(250);
+const corona = new THREE.Sprite(new THREE.SpriteMaterial({ map: coronaTexture(), color: '#ffb340', transparent: true, opacity: 0.32, depthWrite: false, blending: THREE.AdditiveBlending }));
+corona.scale.setScalar(230);
 sunGroup.add(corona);
 const sunHalo2 = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: '#ffe2a8', transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
 sunHalo2.scale.setScalar(80);
@@ -436,7 +438,7 @@ function shadeOrbit(p) {
 }
 
 // planet size follows how much Claude has written in the session (output tokens)
-const planetSize = (s) => Math.max(9, Math.min(22, 9 + 4 * Math.log10(1 + s.tokens.output / 2e3)));
+const planetSize = (s) => Math.max(13, Math.min(26, 13 + 4 * Math.log10(1 + s.tokens.output / 2e3)));
 
 function layout(sessions) {
   const n = sessions.length;
@@ -636,8 +638,8 @@ function animate(now = 0) {
   sunHalo.scale.setScalar(190 + Math.sin(t * (busy ? 2.4 : 0.9)) * (busy ? 14 : 5));
   stars.rotation.y += dt * 0.004;
   corona.material.rotation += dt * 0.025;
-  corona.material.opacity = (busy ? 0.62 : 0.45) + Math.sin(t * 1.3) * 0.05;
-  corona.scale.setScalar(250 + Math.sin(t * (busy ? 2 : 0.8)) * 10);
+  corona.material.opacity = (busy ? 0.42 : 0.3) + Math.sin(t * 1.3) * 0.04;
+  corona.scale.setScalar(230 + Math.sin(t * (busy ? 2 : 0.8)) * 8);
   sunHalo2.scale.setScalar(80 + Math.sin(t * 1.7) * 4);
   dust.rotation.y += dt * 0.006;
   if (!low) updateShooters(t, dt);
@@ -671,7 +673,7 @@ function animate(now = 0) {
     p.halo.scale.setScalar(p.size * (p.hot ? 8 + Math.sin(t * 7) * 1.4 : p.status === 'idle' ? 3.2 : 4.4 + Math.sin(t * 3) * 0.3));
     p.halo.material.opacity = p.hot ? 0.9 : p.status === 'idle' ? 0.35 : 0.6;
 
-    p.label.position.set(0, -p.size - 6, 0);
+    p.label.position.set(0, 0, 0);
 
     // waiting pulse: a ring facing the camera that grows and fades
     if (p.status === 'waiting' || p.hot) {
@@ -698,7 +700,7 @@ function animate(now = 0) {
     p.sel.quaternion.copy(camera.quaternion);
     p.sel.scale.setScalar(p.size * 1.45);
     shadeOrbit(p);
-    p.orbit.material.opacity = p.id === selected ? 0.7 : 0.3;
+    p.orbit.material.opacity = p.id === selected ? 0.6 : 0.2;
     p.orbit.material.color.copy(p.id === selected ? ORBIT.selected : ORBIT.line);
 
     // comet trail
@@ -779,6 +781,9 @@ function cullLabels(selected) {
   for (const o of order) {
     const keep = o.p.id === selected || o.p.id === hoverId;
     const hit = placed.some((q) => Math.abs(q.x - o.x) < 150 && Math.abs(q.y - o.y) < 40);
+    const dist = camera.position.distanceTo(o.p.group.position);
+    const pxPerUnit = h / 2 / (Math.tan((camera.fov * Math.PI) / 360) * dist);
+    o.p.el.style.marginTop = Math.round(o.p.size * 1.25 * pxPerUnit + 24) + 'px';
     o.p.el.classList.toggle('faded', hit && !keep);
     if (!hit || keep) placed.push(o);
   }
