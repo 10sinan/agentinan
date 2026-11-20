@@ -52,11 +52,22 @@
     });
   }
 
-  // Starts in the selected session's folder when there is one, so "npm start" runs in the right project.
+  // The current project's folder, so "npm start" runs in the right place: the selected session's, else the one
+  // whose terminal is on screen, else the busiest / first session, else the folder of the last shell.
+  let lastCwd = null;
+  function projectCwd() {
+    const ss = D.snap().sessions;
+    const pick = ss.find((s) => s.id === D.selected()) || ss.find((s) => s.status === 'busy') || ss.find((s) => s.status === 'waiting') || ss[0];
+    return pick ? pick.cwd : lastCwd;
+  }
+
+  const early = new Map(); // output that arrives before the terminal exists on this side
+
   async function newShell() {
-    const sel = D.snap().sessions.find((s) => s.id === D.selected());
-    const r = await api.shellOpen(sel ? sel.cwd : null);
-    if (!r || r.error) return void D.toast('Terminal açılamadı' + (r && r.error ? ': ' + r.error : ''));
+    const res = await api.shellOpen(projectCwd());
+    if (!res || res.error) return void D.toast('Terminal açılamadı' + (res && res.error ? ': ' + res.error : ''));
+    const r = res.data;
+    lastCwd = r.cwd;
     const el = document.createElement('div');
     el.className = 'term-inst';
     host.appendChild(el);
@@ -74,6 +85,7 @@
     term.open(el);
     term.onData((d) => api.shellInput(r.id, d));
     shells.set(r.id, { term, fit, el, name: r.name, cwd: r.cwd, dead: false });
+    if (early.has(r.id)) term.write(early.get(r.id).join('')), early.delete(r.id);
     show(r.id);
   }
 
@@ -139,7 +151,11 @@
     window.addEventListener('pointerup', up);
   });
 
-  api.onShellData(({ id, data }) => shells.get(id)?.term.write(data));
+  api.onShellData(({ id, data }) => {
+    const s = shells.get(id);
+    if (s) s.term.write(data);
+    else (early.get(id) || early.set(id, []).get(id)).push(data);
+  });
   api.onShellExit(({ id }) => {
     const s = shells.get(id);
     if (!s) return;
