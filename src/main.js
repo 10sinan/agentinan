@@ -4,6 +4,7 @@ const path = require('path');
 const { Collector } = require('./collector');
 const { Terminals } = require('./terminals');
 const { Shells } = require('./shells');
+const { findLinks } = require('./links');
 const { Git } = require('./git');
 const { Monitor } = require('./monitor');
 const { Limits } = require('./limits');
@@ -105,6 +106,7 @@ function poll() {
   let snap;
   try {
     snap = annotate(collector.snapshot());
+    snap.links = findLinks(snap.sessions);
   } catch (e) {
     console.error('snapshot failed', e);
     return;

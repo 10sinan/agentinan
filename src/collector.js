@@ -47,6 +47,8 @@ function clip(s, n) {
   return s.length > n ? s.slice(0, n - 1) + '…' : s;
 }
 
+const WRITE_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
+
 function toolBrief(name, input) {
   if (!input || typeof input !== 'object') return '';
   const base = (p) => (p ? path.basename(String(p)) : '');
@@ -116,6 +118,7 @@ class Transcript {
     this.pending = new Map();
     this.toolCount = 0;
     this.files = new Set();
+    this.edited = new Map(); // file → time of the last write to it (Edit / Write / …), newest last
     this.lastActivity = 0;
   }
 
@@ -198,9 +201,21 @@ class Transcript {
         this.pending.set(c.id, t);
         this.toolCount++;
         const f = c.input && (c.input.file_path || c.input.notebook_path);
-        if (f) this.files.add(f);
+        if (f) {
+          this.files.add(f);
+          if (WRITE_TOOLS.has(c.name)) {
+            this.edited.delete(f); // re-insert so the Map stays ordered by time
+            this.edited.set(f, ts || Date.now());
+            if (this.edited.size > 200) this.edited.delete(this.edited.keys().next().value);
+          }
+        }
       }
     }
+  }
+
+  // The latest files this session wrote to, newest first (the map view looks for two sessions editing one file).
+  recentEdits(limit = 12) {
+    return [...this.edited].slice(-limit).reverse().map(([file, ts]) => ({ file, ts }));
   }
 
   user(j, ts) {
@@ -424,6 +439,7 @@ class Collector {
         toolCount: t ? t.toolCount : 0,
         pendingTools: t ? t.pending.size : 0,
         fileCount: t ? t.files.size : 0,
+        edits: t ? t.recentEdits() : [],
         subagents: subs.map(({ id, type, desc, active }) => ({ id, type, desc, active })),
         lastActivity: t ? t.lastActivity : 0,
       });

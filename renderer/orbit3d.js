@@ -520,6 +520,152 @@ function spawnSparks(sessions) {
   firstSnap = false;
 }
 
+// ---------- links between planets ----------
+// project: a faint light line between sessions started in the same folder, with a spark travelling along it
+// conflict: a red pulsing line (and a caption) between two sessions that both wrote the same file recently
+const links = new Map(); // key → { kind, a, b, line, spark, label?, el?, file? }
+const LINK_DOTS = 22;
+const baseName = (f) => String(f || '').split('/').pop();
+
+function makeLink(w) {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+  const conflict = w.kind === 'conflict';
+  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: conflict ? '#ff3b3b' : '#9fb0e8', transparent: true, opacity: 0.25, depthWrite: false, blending: THREE.AdditiveBlending }));
+  line.frustumCulled = false;
+  scene.add(line);
+  const spark = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: '#ffffff', transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending }));
+  spark.scale.setScalar(conflict ? 12 : 9);
+  scene.add(spark);
+  // a 1px line is easy to miss, so it also carries a row of glowing dots that drift along it
+  const dotGeo = new THREE.BufferGeometry();
+  dotGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(LINK_DOTS * 3), 3));
+  const dots = new THREE.Points(dotGeo, new THREE.PointsMaterial({ size: conflict ? 7 : 4.5, map: GLOW, color: conflict ? '#ff5a4a' : '#b8c6ff', transparent: true, opacity: conflict ? 0.95 : 0.5, depthWrite: false, blending: THREE.AdditiveBlending }));
+  dots.frustumCulled = false;
+  scene.add(dots);
+  const l = { ...w, file: null, line, spark, dots, phase: (hash(w.a + w.b) % 1000) / 1000 };
+  if (conflict) {
+    l.el = document.createElement('div');
+    l.el.className = 'conflict-label';
+    l.label = new CSS2DObject(l.el);
+    scene.add(l.label);
+  }
+  return l;
+}
+
+function disposeLink(l) {
+  for (const o of [l.line, l.spark, l.dots, l.label]) o && scene.remove(o);
+  l.dots.geometry.dispose();
+  l.dots.material.dispose();
+  l.line.geometry.dispose();
+  l.line.material.dispose();
+  l.spark.material.dispose();
+  l.el?.remove();
+}
+
+function setLinks(data) {
+  const want = new Map();
+  for (const [a, b] of (data && data.project) || []) want.set(`p:${a}:${b}`, { kind: 'project', a, b });
+  for (const c of (data && data.conflicts) || []) want.set(`c:${c.a}:${c.b}`, { kind: 'conflict', a: c.a, b: c.b, file: c.file });
+  for (const [k, l] of links) {
+    if (!want.has(k)) {
+      disposeLink(l);
+      links.delete(k);
+    }
+  }
+  for (const [k, w] of want) {
+    let l = links.get(k);
+    if (!l) links.set(k, (l = makeLink(w)));
+    if (w.file && l.file !== w.file) {
+      l.file = w.file;
+      l.el.textContent = `⚠ olası çakışma · ${baseName(w.file)}`;
+    }
+  }
+}
+
+const linkMid = new THREE.Vector3();
+const linkCol = new THREE.Color();
+function updateLinks(t, low) {
+  for (const l of links.values()) {
+    const pa = planets.get(l.a);
+    const pb = planets.get(l.b);
+    const show = !!(pa && pb);
+    l.line.visible = l.spark.visible = l.dots.visible = show;
+    if (l.label) l.label.visible = show;
+    if (!show) continue;
+    const pos = l.line.geometry.attributes.position;
+    pos.setXYZ(0, pa.group.position.x, pa.group.position.y, pa.group.position.z);
+    pos.setXYZ(1, pb.group.position.x, pb.group.position.y, pb.group.position.z);
+    pos.needsUpdate = true;
+    const dp = l.dots.geometry.attributes.position;
+    const drift = (t * (l.kind === 'conflict' ? 0.5 : 0.15) + l.phase) % 1;
+    for (let k = 0; k < LINK_DOTS; k++) {
+      const f = (k + drift) / LINK_DOTS;
+      dp.setXYZ(k, pa.group.position.x + (pb.group.position.x - pa.group.position.x) * f, pa.group.position.y + (pb.group.position.y - pa.group.position.y) * f, pa.group.position.z + (pb.group.position.z - pa.group.position.z) * f);
+    }
+    dp.needsUpdate = true;
+    if (l.kind === 'conflict') {
+      const pulse = 0.5 + 0.5 * Math.sin(t * 6);
+      l.line.material.opacity = 0.35 + 0.5 * pulse;
+      l.dots.material.opacity = 0.55 + 0.45 * pulse;
+      l.spark.material.color.set('#ff6a5a');
+      linkMid.lerpVectors(pa.group.position, pb.group.position, 0.5);
+      l.label.position.copy(linkMid);
+      l.spark.position.copy(linkMid);
+      l.spark.scale.setScalar(10 + pulse * 10);
+    } else {
+      const hue = projectHue(pa.s.cwd);
+      linkCol.setHSL(hue / 360, 0.75, 0.68);
+      l.line.material.color.copy(linkCol);
+      l.line.material.opacity = 0.3;
+      l.dots.material.color.copy(linkCol);
+      l.spark.visible = !low;
+      l.spark.material.color.copy(linkCol);
+      l.spark.position.lerpVectors(pa.group.position, pb.group.position, (t * 0.22 + l.phase) % 1);
+    }
+  }
+}
+
+// ---------- sun beams: energy streaming from the sun to every working planet ----------
+const BEAM_N = 14;
+const BEAM_MAX = 32;
+const beamGeo = new THREE.BufferGeometry();
+beamGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(BEAM_MAX * BEAM_N * 3), 3));
+beamGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(BEAM_MAX * BEAM_N * 3), 3));
+const beams = new THREE.Points(beamGeo, new THREE.PointsMaterial({ size: 9, map: GLOW, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+beams.frustumCulled = false;
+scene.add(beams);
+const beamDir = new THREE.Vector3();
+
+function updateBeams(t, low) {
+  const pos = beamGeo.attributes.position;
+  const col = beamGeo.attributes.color;
+  let n = 0;
+  if (!low) {
+    let used = 0;
+    for (const p of planets.values()) {
+      if (p.status !== 'busy' || used >= BEAM_MAX) continue;
+      used++;
+      const dist = p.group.position.length() || 1;
+      beamDir.copy(p.group.position).divideScalar(dist);
+      const from = 36; // just outside the sun
+      const to = Math.max(from + 1, dist - p.size * 1.3);
+      const speed = 0.3 + (hash(p.id) % 10) / 100;
+      for (let k = 0; k < BEAM_N; k++) {
+        const f = (t * speed + k / BEAM_N) % 1;
+        const d = from + (to - from) * f;
+        pos.setXYZ(n, beamDir.x * d, beamDir.y * d, beamDir.z * d);
+        const a = Math.sin(f * Math.PI) * 1.4; // fades in near the sun and out near the planet
+        col.setXYZ(n, p.color.r * a, p.color.g * a, p.color.b * a);
+        n++;
+      }
+    }
+  }
+  beamGeo.setDrawRange(0, n);
+  pos.needsUpdate = true;
+  col.needsUpdate = true;
+}
+
 // ---------- picking ----------
 const ray = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
@@ -783,6 +929,8 @@ function animate(now = 0) {
   }
 
   updateEmbers(dt);
+  updateLinks(t, low);
+  updateBeams(t, low);
 
   // sparks
   for (let i = sparks.length - 1; i >= 0; i--) {
@@ -853,6 +1001,7 @@ window.addEventListener('dash:settings', () => {
 
 window.addEventListener('dash:snapshot', (e) => {
   layout(e.detail.sessions);
+  setLinks(e.detail.links);
   spawnSparks(e.detail.sessions);
 });
 layout(D.snap().sessions);

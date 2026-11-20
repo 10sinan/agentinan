@@ -762,6 +762,18 @@ textarea:focus {
 .planet-label.sel b {
   color: var(--accent-2);
 }
+.conflict-label {
+  pointer-events: none;
+  white-space: nowrap;
+  font: 600 11px var(--mono);
+  color: #fff;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #ff3b3b 72%, #000);
+  border: 1px solid #ff8a7a;
+  box-shadow: 0 0 14px rgba(255, 59, 59, 0.55);
+  margin-top: -22px;
+}
 .sun-label {
   pointer-events: none;
   color: var(--text-2);
