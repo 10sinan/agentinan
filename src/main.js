@@ -11,6 +11,7 @@ const { Limits } = require('./limits');
 const { trayIcon } = require('./trayicon');
 const { guardIpc } = require('./ipc-guard');
 const { isDirectory } = require('./safepath');
+const { sanitize } = require('./settings-schema');
 
 app.commandLine.appendSwitch('ozone-platform-hint', 'auto'); // native Wayland when available (Fedora's default session)
 // One data folder (~/.config/agentinan) for both `npm start` and the packaged app, whose name is "Agentinan":
@@ -43,7 +44,7 @@ const settingsFile = () => path.join(app.getPath('userData'), 'settings.json');
 
 function loadSettings() {
   try {
-    settings = { ...DEFAULTS, ...JSON.parse(fs.readFileSync(settingsFile(), 'utf8')) };
+    settings = { ...DEFAULTS, ...sanitize(JSON.parse(fs.readFileSync(settingsFile(), 'utf8')), { internal: true }) };
   } catch {}
 }
 
@@ -307,7 +308,7 @@ if (!app.requestSingleInstanceLock()) {
     guardIpc(ipcMain, path.join(__dirname, '..', 'renderer', 'index.html'), (ch, url) => console.error(`ipc '${ch}' refused from ${url}`));
     ipcMain.handle('settings:get', () => settings);
     ipcMain.handle('settings:set', (_e, patch) => {
-      settings = { ...settings, ...patch };
+      settings = { ...settings, ...sanitize(patch) }; // unknown keys and bad values are dropped (settings-schema.js)
       saveSettings();
       updateTray(lastSnap, true);
       return settings;
