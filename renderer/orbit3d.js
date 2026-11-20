@@ -117,7 +117,9 @@ for (let i = 0; i < 5; i++) {
 }
 
 // ---------- sun ----------
-function surfaceTexture(seed, banded) {
+function surfaceTexture(seed, banded, hue = null) {
+  // with a hue, the grey surface is tinted by it (the project colour); without, it stays neutral
+  const tone = (v, a = 1) => (hue === null ? `rgba(${v},${v},${v},${a})` : `hsla(${hue},34%,${(v / 255) * 100}%,${a})`);
   const c = document.createElement('canvas');
   c.width = 256;
   c.height = 128;
@@ -129,13 +131,13 @@ function surfaceTexture(seed, banded) {
   if (banded) {
     for (let y = 0; y < 128; y += 2) {
       const v = 175 + Math.sin(y * 0.11 + rnd() * 0.6) * 35 + rnd() * 30;
-      g.fillStyle = `rgb(${v},${v},${v})`;
+      g.fillStyle = tone(v);
       g.fillRect(0, y, 256, 2);
     }
   }
   for (let i = 0; i < 140; i++) {
     const v = 140 + rnd() * 115;
-    g.fillStyle = `rgba(${v},${v},${v},${0.25 + rnd() * 0.35})`;
+    g.fillStyle = tone(v, 0.25 + rnd() * 0.35);
     g.beginPath();
     g.ellipse(rnd() * 256, rnd() * 128, 4 + rnd() * 26, 1 + rnd() * 5, 0, 0, Math.PI * 2);
     g.fill();
@@ -283,10 +285,13 @@ const ATMO_FS = `uniform vec3 uColor; uniform float uAlpha; varying vec3 vN; var
 void main() { float f = pow(1.0 - max(dot(vN, vV), 0.0), 2.6); gl_FragColor = vec4(uColor * (0.6 + f), f * uAlpha); }`;
 const ATMO_GEO = new THREE.SphereGeometry(1, 40, 28);
 
+// sessions in the same folder share a hue: a tint on the surface and a dot on the label
+const projectHue = (cwd) => hash(cwd || '') % 360;
+
 function makePlanet(s) {
   const h = hash(s.id);
   const group = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ map: surfaceTexture(h, true), roughness: 0.75, metalness: 0.05, emissive: new THREE.Color('#000'), emissiveIntensity: 1 });
+  const mat = new THREE.MeshStandardMaterial({ map: surfaceTexture(h, true, projectHue(s.cwd)), roughness: 0.75, metalness: 0.05, emissive: new THREE.Color('#000'), emissiveIntensity: 1 });
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, 40, 28), mat);
   mesh.userData.id = s.id;
   group.add(mesh);
@@ -318,6 +323,13 @@ function makePlanet(s) {
     new THREE.MeshBasicMaterial({ color: D.COLORS.waiting, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }),
   );
   scene.add(pulse);
+
+  // shockwave: a wider, faster red ring that rolls outward from an overheating planet
+  const shock = new THREE.Mesh(
+    new THREE.RingGeometry(0.97, 1, 64),
+    new THREE.MeshBasicMaterial({ color: HOT_A, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }),
+  );
+  scene.add(shock);
 
   // selection ring
   const sel = new THREE.Mesh(
@@ -360,6 +372,7 @@ function makePlanet(s) {
     halo,
     ring,
     pulse,
+    shock,
     sel,
     orbit,
     trail,
@@ -380,7 +393,7 @@ function makePlanet(s) {
 }
 
 function disposePlanet(p) {
-  for (const o of [p.group, p.pulse, p.sel, p.orbit, p.trail]) {
+  for (const o of [p.group, p.pulse, p.shock, p.sel, p.orbit, p.trail]) {
     scene.remove(o);
     o.traverse?.((x) => {
       x.geometry !== ATMO_GEO && x.geometry !== MOON_GEO && x.geometry?.dispose();
@@ -440,6 +453,7 @@ function layout(sessions) {
     if (p.status !== s.status) p.statusChangedAt = performance.now();
     p.status = s.status;
     const waiting = s.status === 'waiting' && s.waitingFor ? ` · ${D.esc(s.waitingFor)}` : '';
+    p.el.style.setProperty('--proj', `hsl(${projectHue(s.cwd)} 70% 62%)`);
     p.el.className = `planet-label ${s.status}${s.id === D.selected() ? ' sel' : ''}`;
     p.el.innerHTML = `<b>${s.control ? '<i class="ctl">›_</i>' : ''}${D.esc(s.name)}</b><span>${D.LABELS[s.status] || D.esc(s.status)}${waiting} · ${D.fmtTok(s.context)} bağlam</span>`;
     syncMoons(p, s.subagents.filter((a) => a.active).length);
@@ -607,6 +621,8 @@ function animate(now = 0) {
   const onMap = D.tab() === 'map';
   const low = D.settings().quality === 'low';
   if (!onMap) return; // the map is hidden behind the other tabs: draw nothing
+  // the heavy decoration is skipped on low quality
+  for (const o of [dust, corona, sunHalo2, ...SHOOTERS.map((x) => x.line)]) o.visible = !low;
   const gap = low ? 1000 / 30 : 0;
   if (now - lastFrame < gap) return;
   lastFrame = now;
@@ -624,7 +640,7 @@ function animate(now = 0) {
   corona.scale.setScalar(250 + Math.sin(t * (busy ? 2 : 0.8)) * 10);
   sunHalo2.scale.setScalar(80 + Math.sin(t * 1.7) * 4);
   dust.rotation.y += dt * 0.006;
-  updateShooters(t, dt);
+  if (!low) updateShooters(t, dt);
 
   const selected = D.selected();
   for (const p of planets.values()) {
@@ -648,6 +664,7 @@ function animate(now = 0) {
     p.mesh.material.color.copy(p.color);
     p.mesh.material.emissive.copy(p.color).multiplyScalar(p.hot ? 0.95 : p.status === 'idle' ? 0.12 : 0.32);
     p.halo.material.color.copy(p.color);
+    p.atmo.visible = !low;
     p.atmo.scale.setScalar(p.mesh.scale.x * 1.17);
     p.atmo.material.uniforms.uColor.value.copy(p.color).lerp(WHITE, 0.25);
     p.atmo.material.uniforms.uAlpha.value = p.hot ? 1.4 : p.status === 'idle' ? 0.55 : 1;
@@ -665,6 +682,14 @@ function animate(now = 0) {
       p.pulse.material.color.copy(p.hot ? HOT_A : STATUS.waiting);
       p.pulse.material.opacity = 0.9 * (1 - ph);
     } else p.pulse.material.opacity = 0;
+
+    if (p.hot) {
+      const sh = (t * 0.9 + (hash(p.id) % 100) / 100) % 1;
+      p.shock.position.copy(p.group.position);
+      p.shock.quaternion.copy(camera.quaternion);
+      p.shock.scale.setScalar(p.size * (1.5 + sh * 7));
+      p.shock.material.opacity = 0.7 * (1 - sh) ** 2;
+    } else p.shock.material.opacity = 0;
 
     // selection / hover ring
     const on = p.id === selected || p.id === hoverId;

@@ -13,10 +13,19 @@ contextBridge.exposeInMainWorld('agentinan', {
   pickFolder: () => ipcRenderer.invoke('pick-folder'),
   startSession: (opts) => ipcRenderer.invoke('session:start', opts),
   stopSession: (key) => ipcRenderer.invoke('session:stop', key),
+  renameSession: (id, title) => ipcRenderer.invoke('session:rename', id, title), // → { data } or { error }
+  deleteSession: (id) => ipcRenderer.invoke('session:delete', id),
   attach: (key) => ipcRenderer.invoke('term:attach', key),
   input: (key, data) => ipcRenderer.send('term:input', { key, data }),
   sendLine: (key, text) => ipcRenderer.send('term:line', { key, text }),
   resize: (key, cols, rows) => ipcRenderer.send('term:resize', { key, cols, rows }),
+  // plain shells in the bottom drawer
+  shellOpen: (cwd) => ipcRenderer.invoke('shell:open', cwd), // → { data: { id, cwd, name } } or { error }
+  shellInput: (id, data) => ipcRenderer.send('shell:input', { id, data }),
+  shellResize: (id, cols, rows) => ipcRenderer.send('shell:resize', { id, cols, rows }),
+  shellClose: (id) => ipcRenderer.send('shell:close', id),
+  onShellData: (fn) => ipcRenderer.on('shell:data', (_e, m) => fn(m)),
+  onShellExit: (fn) => ipcRenderer.on('shell:exit', (_e, m) => fn(m)),
   onTermData: (fn) => ipcRenderer.on('term:data', (_e, m) => fn(m)),
   onTermExit: (fn) => ipcRenderer.on('term:exit', (_e, m) => fn(m)),
 

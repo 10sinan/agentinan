@@ -132,10 +132,11 @@
     const t = ensure(key, retry === true);
     for (const x of terms.values()) x.el.style.display = x === t ? 'block' : 'none';
     const s = list.find((x) => x.control === key);
+    if (D.pickerOpen($('conTitle'))) return; // an open model menu would close on redraw
     $('conTitle').innerHTML = s
       ? `<i class="sdot ${s.status}"></i><b>${D.esc(s.name)}</b><span class="pill ${s.status}">${D.LABELS[s.status] || D.esc(s.status)}${
           s.status === 'waiting' && s.waitingFor ? ' · ' + D.esc(s.waitingFor) : ''
-        }</span>`
+        }</span>${D.modelPicker(s)}`
       : `<i class="sdot busy"></i><b>Yeni oturum</b><span class="pill busy">Başlıyor…</span>`;
     $('conNote').textContent = key.startsWith('own:')
       ? 'Bu klasör ilk kez açılıyor: Claude\'un güven sorusunu terminalde cevapla. Agentinan kapanınca bu oturum da kapanır.'

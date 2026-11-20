@@ -12,10 +12,17 @@ Arayüz beş sekmeden oluşur: **Harita**, **Oturumlar**, **Terminal**, **Git** 
   - Mavi: boşta.
   - Etrafında dönen aylar: çalışan alt ajanlar.
   - Gezegenden uçuşan yazılar: o anda yapılan araç çağrıları.
+  - Aynı klasördeki oturumlar aynı rengi paylaşır: gezegenin yüzeyi o renge hafifçe boyanır, etikette de küçük bir renk noktası görünür.
+  - Aşırı ısınan gezegenin çevresinden kırmızı şok dalgaları yayılır.
+  - Süsler: güneşte korona ışınları, gezegenlerde atmosfer parıltısı, çevrede toz diski, arada bir kayan yıldız ve gezegenin arkasında solan yörünge çizgisi. **Ayarlar → Harita kalitesi → Düşük** seçilince korona, atmosfer, toz diski ve kayan yıldızlar kapanır.
 - **Oturum listesi:** Son isteğiniz, son araç çağrıları, token, tahmini maliyet, bağlam doluluğu ve alt ajanlar.
   Bir karta tıklarsanız Claude'un son cevabı açılır. Oradan klasörü açabilir ya da `claude --resume` komutunu kopyalayabilirsiniz.
 - **Bugünün toplamı:** Kapanmış oturumlar da dahil, model bazında token ve maliyet.
 - **Komut verme:** Üst çubuktaki **Yeni oturum** ile bir klasörde Claude başlatırsınız. **Terminal** sekmesinde o oturumun terminali ve bir komut kutusu açılır; haritada bu oturumlar `›_` işaretiyle görünür. Oradan Claude'a yazabilir, onay sorularını **✓ Onayla** ya da **✕ Reddet / Durdur** ile cevaplayabilirsiniz.
+  Haritada bir gezegene tıklayınca açılan kartta da bir komut kutusu vardır; yazdığınız komut doğrudan o oturuma gider (Agentinan'dan başlatılan oturumlar için).
+- **Model:** Her oturumun kullandığı Claude modeli harita kartında, Oturumlar'daki ayrıntı panelinde ve Terminal sekmesinin başlığında görünür. Agentinan'dan başlatılan oturumlarda bu bir menüdür: seçince oturuma `/model` komutu gönderilir. Dışarıdan açılan oturumlarda sadece gösterilir.
+- **Terminal çekmecesi:** Pencerenin altında, `Ctrl+`` ya da üst çubuktaki **Terminal** düğmesiyle açılıp kapanan sıradan bir terminal. Projeleri çalıştırmak için (sunucu, test…); seçili oturumun klasöründe açılır, birden çok sekme olur ve çekmece kapalıyken de çalışmaya devam eder. Üst kenarından sürükleyerek boyu ayarlanır.
+- **Sohbet adı ve silme:** Harita kartındaki ✎ ya da Oturumlar'daki ayrıntı panelinden sohbetin adını değiştirebilirsiniz; ad Claude Code'un kendi sohbet listesinde (`/resume`) de görünür. **Sil** düğmesi iki kez basılınca oturumu kapatır ve sohbeti (`~/.claude/projects` altındaki dosyasını) kalıcı olarak siler.
   Bu oturumlar Claude Code'un arka plan oturumlarıdır (`claude --bg`). Agentinan kapansa da çalışmaya devam ederler ve tekrar açınca yeniden bağlanılır.
   Daha önce hiç onaylanmamış bir klasör seçerseniz Claude'un "bu klasöre güveniyor musun" sorusu terminalde çıkar. Böyle bir oturum Agentinan kapanınca kapanır.
   VS Code'da ya da başka bir terminalde açılan oturumlar sadece izlenir; onlara dışarıdan komut gönderilemez.
@@ -69,12 +76,13 @@ Node'un yerleşik `node:test`'i kullanılır, ek bağımlılık yoktur. Testler 
 
 ## Nasıl çalışır
 
-Veriyi yalnızca `~/.claude` altındaki dosyalardan okur (`CLAUDE_CONFIG_DIR` ayarlıysa oradakilerden). Ağa kendisi bağlanmaz.
+Veriyi `~/.claude` altındaki dosyalardan okur (`CLAUDE_CONFIG_DIR` ayarlıysa oradakilerden). Ağa kendisi bağlanmaz.
 Dışarıya dokunduğu yerler sadece sizin açtığınız özelliklerdir:
 
 - **Kullanım limitleri** açılırsa `~/.claude/settings.json` dosyasına (yedeğini alarak) bir `statusLine` ekler.
 - **Git sekmesi** commit, push, pull ve fetch yapar; bunlar `git` programını çalıştırır, push / pull / fetch ağa bağlanır.
 - **Yeni oturum** Claude Code başlatır.
+- **Ad değiştirme** sohbet dosyasının sonuna bir başlık kaydı ekler; **Sil** sohbet dosyasını siler.
 
 - `sessions/<pid>.json`: Çalışan her Claude Code süreci için bir dosya. Klasörü ve durumu (`busy` / `idle` / `waiting`) tutar.
   Süreç gerçekten çalışıyor mu diye `/proc/<pid>/stat` dosyasındaki başlangıç zamanıyla karşılaştırılır.

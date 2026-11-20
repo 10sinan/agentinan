@@ -257,6 +257,7 @@ function detail(s, hog) {
         <span>önbellek isabeti</span><b>${cacheHit(s)}</b>
         <span>toplam (önbellek dahil)</span><b>${fmtTok(s.tokens.total)}</b>
         <span>araç çağrısı</span><b>${s.toolCount}</b>
+        <span>model</span><b class="model-cell">${modelPicker(s)}</b>
         <span>pid</span><b>${s.pid}</b>
       </div>
       <div class="sd-path" title="${esc(s.cwd)}">${esc(s.cwd)}</div>
@@ -265,6 +266,8 @@ function detail(s, hog) {
         ${s.control ? `<button class="btn sm" data-act="term">terminal</button>` : ''}
         <button class="btn sm" data-act="open">klasör</button>
         <button class="btn sm" data-act="resume" title="claude --resume komutunu kopyala">--resume</button>
+        <button class="btn sm" data-act="rename" title="Sohbetin adını değiştir">${icon('pencil')}ad</button>
+        ${delButton(s)}
       </div>
     </div>
   </div>`;
@@ -272,6 +275,7 @@ function detail(s, hog) {
 
 function renderGrid() {
   const grid = $('grid');
+  if (pickerOpen(grid)) return;
   const fn = FILTERS.find((f) => f[0] === filter)[2];
   const list = snap.sessions.filter(fn);
   const scroll = grid.scrollTop;
@@ -288,6 +292,8 @@ $('grid').addEventListener('click', (e) => {
   const s = snap.sessions.find((x) => x.id === el.dataset.id);
   const act = e.target.closest('button')?.dataset.act;
   if (!s) return;
+  if (act === 'rename') return void openRename(s);
+  if (act === 'delete') return void askDelete(s);
   if (act === 'open') return void api.openFolder(s.cwd);
   if (act === 'resume') {
     api.copy(`cd ${shq(s.cwd)} && claude --resume ${s.id}`);
@@ -312,10 +318,15 @@ function renderMapCard() {
     el.hidden = true;
     return;
   }
+  if (pickerOpen(el) && el.dataset.id === s.id) return;
+  // the card is redrawn on every snapshot: keep what is being typed in the command box
+  const box = el.querySelector('.mc-send input');
+  const typed = box && el.dataset.id === s.id ? { v: box.value, focus: document.activeElement === box } : null;
+  el.dataset.id = s.id;
   el.hidden = false;
   el.innerHTML = `
-    <div class="mc-top"><i class="sdot ${s.status}"></i><span class="mc-name">${esc(s.name)}</span>${statusPill(s)}</div>
-    <div class="mc-meta">${esc(s.project)} · ${esc(s.model || 'model yok')} · ${ago(s.statusSince)}${s.waitingFor && s.status === 'waiting' ? ' · ' + esc(s.waitingFor) : ''}</div>
+    <div class="mc-top"><i class="sdot ${s.status}"></i><span class="mc-name" title="${esc(s.name)}">${esc(s.name)}</span><button class="btn sm ghost icon-only" data-act="rename" title="Sohbetin adını değiştir">${icon('pencil')}</button>${statusPill(s)}</div>
+    <div class="mc-meta">${esc(s.project)} · ${ago(s.statusSince)}${s.waitingFor && s.status === 'waiting' ? ' · ' + esc(s.waitingFor) : ''}</div>
     ${s.lastPrompt ? `<div class="mc-prompt">› ${esc(s.lastPrompt)}</div>` : ''}
     <div class="mc-stats">
       <div><span>Bağlam</span><b>${fmtTok(s.context)}</b></div>
@@ -323,17 +334,127 @@ function renderMapCard() {
       <div><span>Maliyet*</span><b>${fmtCost(s.cost)}</b></div>
       <div><span>Araç</span><b>${s.toolCount}</b></div>
     </div>
+    <div class="mc-model"><span>Model</span>${modelPicker(s)}</div>
+    ${
+      s.control
+        ? `<form class="mc-send"><input maxlength="4000" placeholder="Claude'a komut ver…" autocomplete="off" /><button class="btn primary sm" title="Gönder">${icon('send')}</button></form>`
+        : ''
+    }
     <div class="mc-actions">
-      ${s.control ? `<button class="btn primary sm" data-act="term">${icon('terminal')}Terminali aç</button>` : `<span class="pill">${icon('eye')}Sadece izleme</span>`}
+      ${s.control ? `<button class="btn sm" data-act="term">${icon('terminal')}Terminal</button>` : `<span class="pill" title="Agentinan dışında açılan oturumlara komut gönderilemez">${icon('eye')}Sadece izleme</span>`}
       <button class="btn sm" data-act="details">Ayrıntılar</button>
+      ${delButton(s)}
       <button class="btn sm ghost" data-act="close" title="Seçimi kaldır">${icon('x')}</button>
     </div>`;
+  if (typed) {
+    const nb = el.querySelector('.mc-send input');
+    if (nb) {
+      nb.value = typed.v;
+      if (typed.focus) nb.focus();
+    }
+  }
 }
+
+// Model chip: shows the model a session is using; for sessions Agentinan controls it is a menu that sends /model.
+const MODELS = [
+  ['Opus 5.5', 'claude-opus-5-5'],
+  ['Sonnet 5.5', 'claude-sonnet-5-5'],
+  ['Haiku 5.5', 'claude-haiku-5-5'],
+  ['Fable 5.2', 'claude-fable-5-2'],
+];
+function modelPicker(s) {
+  if (!s.control) return `<span class="pill model-chip" title="Agentinan dışında açılan oturumun modeli buradan değiştirilemez">${esc(s.model || 'model yok')}</span>`;
+  const known = MODELS.some(([n]) => n === s.model);
+  const opts = (known || !s.model ? '' : `<option value="" selected hidden>${esc(s.model)}</option>`) +
+    MODELS.map(([n, id]) => `<option value="${id}"${n === s.model ? ' selected' : ''}>${n}</option>`).join('');
+  return `<select class="model-pick" data-sid="${esc(s.id)}" title="Bu oturumun modelini değiştir (/model gönderir)">${opts}</select>`;
+}
+// a redraw would close an open menu
+const pickerOpen = (el) => el && el.contains(document.activeElement) && document.activeElement.matches('.model-pick');
+function changeModel(sid, modelId) {
+  const s = snap.sessions.find((x) => x.id === sid);
+  if (!s || !s.control || !modelId) return;
+  api.sendLine(s.control, `/model ${modelId}`);
+  toast(s.status === 'busy' ? 'Model değişikliği gönderildi; iş bitince uygulanır' : 'Model değişikliği gönderildi');
+  document.activeElement?.blur();
+}
+document.addEventListener('change', (e) => {
+  if (e.target.matches?.('.model-pick')) changeModel(e.target.dataset.sid, e.target.value);
+});
+
+// Deleting asks twice: the first press arms the button for a few seconds.
+let delArmed = null;
+let delTimer = null;
+function delButton(s) {
+  const on = delArmed === s.id;
+  return `<button class="btn sm ${on ? 'danger' : ''}" data-act="delete" title="Oturumu kapatır ve sohbeti kalıcı olarak siler">${icon('trash')}${on ? 'Emin misin? Tekrar bas' : 'sil'}</button>`;
+}
+async function askDelete(s) {
+  if (delArmed !== s.id) {
+    delArmed = s.id;
+    clearTimeout(delTimer);
+    delTimer = setTimeout(() => {
+      delArmed = null;
+      renderGrid();
+      renderMapCard();
+    }, 3500);
+    renderGrid();
+    renderMapCard();
+    return;
+  }
+  clearTimeout(delTimer);
+  delArmed = null;
+  toast('Oturum kapatılıp sohbet siliniyor…');
+  const r = await api.deleteSession(s.id);
+  if (r && r.error) toast('Silinemedi: ' + r.error);
+  else {
+    toast('Sohbet silindi');
+    if (selected === s.id) select(null);
+  }
+  api.refresh();
+}
+
+// Rename dialog (window.prompt does not exist in Electron).
+const renameModal = $('renameModal');
+let renaming = null;
+function openRename(s) {
+  renaming = s;
+  $('renameInput').value = s.name;
+  $('renameErr').textContent = '';
+  renameModal.hidden = false;
+  $('renameInput').focus();
+  $('renameInput').select();
+}
+$('renameCancel').onclick = () => (renameModal.hidden = true);
+renameModal.addEventListener('click', (e) => e.target === renameModal && (renameModal.hidden = true));
+document.addEventListener('keydown', (e) => e.key === 'Escape' && !renameModal.hidden && (renameModal.hidden = true));
+$('renameForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!renaming) return;
+  const r = await api.renameSession(renaming.id, $('renameInput').value);
+  if (r && r.error) return void ($('renameErr').textContent = r.error);
+  renameModal.hidden = true;
+  toast('Ad değiştirildi');
+  api.refresh();
+});
 $('mapCard').addEventListener('click', (e) => {
   const act = e.target.closest('button')?.dataset.act;
+  const s = snap.sessions.find((x) => x.id === selected);
   if (act === 'term') setTab('terminal');
   if (act === 'details') setTab('sessions');
   if (act === 'close') select(null);
+  if (act === 'rename' && s) openRename(s);
+  if (act === 'delete' && s) askDelete(s);
+});
+// a command typed on the planet's card goes straight to that session
+$('mapCard').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const s = snap.sessions.find((x) => x.id === selected);
+  const input = e.target.querySelector('input');
+  if (!s || !s.control || !input || !input.value.trim()) return;
+  api.sendLine(s.control, input.value);
+  input.value = '';
+  toast('Komut gönderildi');
 });
 
 // ---------- selection ----------
@@ -418,6 +539,8 @@ window.dash = {
   },
   LABELS,
   esc,
+  modelPicker,
+  pickerOpen,
   fmtTok,
   fmtCost,
   ago,

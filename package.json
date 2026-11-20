@@ -1,6 +1,6 @@
 {
   "name": "agentinan",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Linux için Claude Code oturum panosu: canlı yörünge haritası, token/maliyet ve bildirimler",
   "main": "src/main.js",
   "private": true,
