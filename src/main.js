@@ -443,8 +443,9 @@ if (!app.requestSingleInstanceLock()) {
     createTray();
     win.webContents.on('did-finish-load', poll);
     setInterval(poll, POLL_MS);
-    // AGENTINAN_SHOT=/path.png: save one screenshot after start-up and quit (for checking the UI).
-    if (process.env.AGENTINAN_SHOT) {
+    // AGENTINAN_SHOT=/path.png: save one screenshot after start-up and quit (for checking the UI). Development only:
+    // AGENTINAN_EVAL runs arbitrary script in the page and AGENTINAN_SHOT writes a file, so a packaged app ignores them.
+    if (!app.isPackaged && process.env.AGENTINAN_SHOT) {
       setTimeout(async () => {
         if (process.env.AGENTINAN_SELECT) win.webContents.send('select', process.env.AGENTINAN_SELECT);
         // AGENTINAN_EVAL: page script run before the screenshot, to drive the UI in a test.
