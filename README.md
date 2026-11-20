@@ -12,6 +12,7 @@ Arayüz beş sekmeden oluşur: **Harita**, **Oturumlar**, **Terminal**, **Git** 
   - Mavi: boşta.
   - Etrafında dönen aylar: çalışan alt ajanlar.
   - Gezegenden uçuşan yazılar: o anda yapılan araç çağrıları.
+  - Gezegenler birbirini hafifçe iter ve çeker; çalışan gezegen güneşe doğru hafifçe eğilir, güneşe fazla yaklaşan geri savrulur. Bir gezegeni fareyle tutup sürükleyebilirsiniz; bırakınca yaylanarak yörüngesine döner. Bu sadece görseldir, oturumlara dokunmaz. Düşük kalitede gezegenlerin birbirine etkisi kapanır, sürükleme çalışır.
   - Aynı klasördeki oturumlar aynı rengi paylaşır: gezegenin yüzeyi o renge hafifçe boyanır, etikette de küçük bir renk noktası görünür.
   - Aşırı ısınan gezegenin çevresinden kırmızı şok dalgaları yayılır.
   - Süsler: güneşte korona ışınları, gezegenlerde atmosfer parıltısı, çevrede toz diski, arada bir kayan yıldız ve gezegenin arkasında solan yörünge çizgisi. **Ayarlar → Harita kalitesi → Düşük** seçilince korona, atmosfer, toz diski ve kayan yıldızlar kapanır.

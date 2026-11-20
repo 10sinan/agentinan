@@ -6,6 +6,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { makeBody, stepBodies } from './physics.mjs';
 
 const D = window.dash;
 const host = document.getElementById('scene');
@@ -380,6 +381,7 @@ function makePlanet(s) {
     trail,
     trailN: TRAIL,
     moons,
+    phys: Object.assign(makeBody(), { anchor: new THREE.Vector3(), off: new THREE.Vector3(), vel: new THREE.Vector3(), target: new THREE.Vector3() }),
     label,
     el,
     angle: (h % 6283) / 1000,
@@ -533,6 +535,7 @@ function pick(e) {
 }
 
 labels.domElement.addEventListener('pointermove', (e) => {
+  if (drag && drag.active) return;
   hoverId = pick(e);
   labels.domElement.style.cursor = hoverId ? 'pointer' : 'grab';
   const s = hoverId && D.snap().sessions.find((v) => v.id === hoverId);
@@ -552,7 +555,49 @@ labels.domElement.addEventListener('pointerleave', () => {
   hoverId = null;
   tip.hidden = true;
 });
-labels.domElement.addEventListener('pointerdown', (e) => (downAt = [e.clientX, e.clientY]));
+// Grab a planet and pull it: it follows the pointer, and springs back to its orbit (with a fling) when let go.
+let drag = null; // { p, sx, sy, active }
+const dragPlane = new THREE.Plane();
+const UP = new THREE.Vector3(0, 1, 0);
+const dragPoint = new THREE.Vector3();
+labels.domElement.addEventListener(
+  'pointerdown',
+  (e) => {
+    downAt = [e.clientX, e.clientY];
+    const id = e.button === 0 ? pick(e) : null;
+    const p = id && planets.get(id);
+    if (p) drag = { p, sx: e.clientX, sy: e.clientY, active: false };
+  },
+  true, // before OrbitControls sees it, so grabbing a planet does not also rotate the camera
+);
+window.addEventListener('pointermove', (e) => {
+  if (!drag) return;
+  if (!drag.active) {
+    if (Math.hypot(e.clientX - drag.sx, e.clientY - drag.sy) < 6) return; // still a click
+    drag.active = true;
+    drag.p.phys.held = true;
+    tip.hidden = true;
+    labels.domElement.style.cursor = 'grabbing';
+  }
+  // the pointer moves the planet within the plane of the orbits (so other planets, which live there too, can react)
+  const r = labels.domElement.getBoundingClientRect();
+  mouse.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(mouse, camera);
+  dragPlane.set(UP, -drag.p.phys.anchor.y);
+  if (ray.ray.intersectPlane(dragPlane, dragPoint)) {
+    if (dragPoint.length() > 900) dragPoint.setLength(900); // never lose a planet off the map
+    drag.p.phys.target.copy(dragPoint);
+  }
+});
+const endDrag = () => {
+  if (!drag) return;
+  drag.p.phys.held = false;
+  drag = null;
+  labels.domElement.style.cursor = 'grab';
+};
+window.addEventListener('pointerup', endDrag);
+window.addEventListener('pointercancel', endDrag);
+window.addEventListener('blur', endDrag);
 labels.domElement.addEventListener('pointerup', (e) => {
   if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5) return; // a drag, not a click
   const id = pick(e);
@@ -628,7 +673,7 @@ function animate(now = 0) {
   const gap = low ? 1000 / 30 : 0;
   if (now - lastFrame < gap) return;
   lastFrame = now;
-  controls.enabled = onMap;
+  controls.enabled = onMap && !drag;
 
   const dt = Math.min(0.1, clock.getDelta());
   const t = clock.elapsedTime;
@@ -645,10 +690,21 @@ function animate(now = 0) {
   if (!low) updateShooters(t, dt);
 
   const selected = D.selected();
+
+  // each planet travels its orbit (the anchor); physics adds a small springy offset on top of it
+  const bodies = [];
   for (const p of planets.values()) {
     const speed = p.status === 'busy' ? 0.32 : p.status === 'waiting' ? 0 : 0.035;
     p.angle += (speed * dt * 140) / p.radius;
-    orbitPoint(p, p.angle, p.group.position);
+    orbitPoint(p, p.angle, p.phys.anchor);
+    p.phys.radius = p.size;
+    p.phys.pull = p.status === 'busy' ? 1 : 0;
+    bodies.push(p.phys);
+  }
+  stepBodies(bodies, dt, !low);
+
+  for (const p of planets.values()) {
+    p.group.position.copy(p.phys.anchor).add(p.phys.off);
     if (p.hot) {
       // shake
       const k = p.size * 0.18;
