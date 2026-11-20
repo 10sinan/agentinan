@@ -176,6 +176,74 @@ function renderBadges() {
   set($('badgeTerminal'), waiting.filter((s) => s.control).length);
 }
 
+// ---------- waiting queue: every session that waits for you, answered from one place ----------
+let waitOpen = false;
+const answered = new Map(); // session id → when an answer was sent (until its status changes)
+let waitHtml = '';
+
+function renderWaitQueue() {
+  const list = snap.sessions.filter((s) => s.status === 'waiting');
+  for (const [id, at] of answered) {
+    const s = list.find((x) => x.id === id);
+    if (!s || Date.now() - at > 10_000) answered.delete(id);
+  }
+  $('waitBtn').hidden = !list.length;
+  $('waitN').textContent = list.length;
+  $('waitBtn').classList.toggle('open', waitOpen);
+  if (!list.length) waitOpen = false;
+  $('waitPanel').hidden = !waitOpen;
+  if (!waitOpen) return;
+  const html =
+    `<div class="wq-head">${icon('bell')}<b>${list.length} oturum seni bekliyor</b><span class="spacer"></span><button class="btn sm ghost icon-only" data-a="close" title="Kapat (Esc)">${icon('x')}</button></div>` +
+    list
+      .map((s) => {
+        const sent = answered.has(s.id);
+        const acts = s.control
+          ? `<button class="btn sm primary" data-a="approve" title="Enter gönderir: onay sorularında ilk seçenek (Evet)"${sent ? ' disabled' : ''}>${icon('check')}Onayla</button>` +
+            `<button class="btn sm" data-a="deny" title="Esc gönderir: reddeder ya da durdurur"${sent ? ' disabled' : ''}>${icon('x')}Reddet</button>` +
+            `<button class="btn sm ghost" data-a="term" title="Terminalinde cevap ver">${icon('terminal')}Terminal</button>`
+          : `<button class="btn sm" data-a="map">${icon('target')}Haritada göster</button><span class="wq-note">Agentinan dışında açıldı; cevabı orada ver</span>`;
+        return `<div class="wq-row${sent ? ' sent' : ''}" data-id="${esc(s.id)}">
+          <div class="wq-top"><i class="sdot waiting"></i><b>${esc(s.name)}</b><span class="wq-proj">${esc(s.project || '')}</span><span class="spacer"></span><span class="wq-ago">${ago(s.statusSince)}</span></div>
+          ${s.waitingFor ? `<div class="wq-what">${esc(s.waitingFor)}</div>` : ''}
+          ${s.lastText ? `<div class="wq-text">${esc(s.lastText)}</div>` : ''}
+          <div class="wq-actions">${sent ? '<span class="wq-note">Gönderildi, cevap bekleniyor…</span>' : acts}</div>
+        </div>`;
+      })
+      .join('');
+  if (html === waitHtml) return; // redrawing would swallow a click that is half done
+  waitHtml = html;
+  $('waitPanel').innerHTML = html;
+}
+
+function toggleWait(open = !waitOpen) {
+  waitOpen = open;
+  waitHtml = '';
+  renderWaitQueue();
+}
+$('waitBtn').onclick = () => toggleWait();
+$('waitPanel').addEventListener('click', (e) => {
+  const a = e.target.closest('[data-a]')?.dataset.a;
+  if (!a) return;
+  if (a === 'close') return toggleWait(false);
+  const s = snap.sessions.find((x) => x.id === e.target.closest('.wq-row')?.dataset.id);
+  if (!s) return;
+  if ((a === 'approve' || a === 'deny') && s.control) {
+    api.input(s.control, a === 'approve' ? '\r' : '\x1b');
+    answered.set(s.id, Date.now());
+    toast(a === 'approve' ? `${s.name}: onay gönderildi` : `${s.name}: reddedildi`);
+    waitHtml = '';
+    return renderWaitQueue();
+  }
+  select(s.id, true);
+  setTab(a === 'term' ? 'terminal' : 'map');
+  toggleWait(false);
+});
+document.addEventListener('click', (e) => {
+  if (waitOpen && !e.target.closest('#waitPanel, #waitBtn')) toggleWait(false);
+});
+document.addEventListener('keydown', (e) => e.key === 'Escape' && waitOpen && toggleWait(false));
+
 // ---------- sessions table ----------
 // One row per session (like htop); the selected row opens a detail panel under it.
 const FILTERS = [
@@ -540,6 +608,7 @@ function select(id, reveal) {
 function applySettings() {
   $('nWaiting').checked = settings.notifyWaiting;
   $('nDone').checked = settings.notifyDone;
+  $('trayKeep').checked = settings.trayKeep !== false;
   for (const b of document.querySelectorAll('#quality button')) b.classList.toggle('active', b.dataset.q === settings.quality);
   document.body.classList.toggle('low', settings.quality === 'low');
   if (settings.theme !== window.themes.current().id) window.themes.apply(settings.theme);
@@ -577,6 +646,8 @@ window.addEventListener('dash:settings-reload', async () => {
   settings = { ...settings, ...(await api.getSettings()) };
   applySettings();
 });
+api.onSettingsChanged(() => window.dispatchEvent(new Event('dash:settings-reload'))); // changed from the tray menu
+$('trayKeep').onchange = () => saveSettings({ trayKeep: $('trayKeep').checked });
 $('quality').addEventListener('click', (e) => {
   const q = e.target.closest('button')?.dataset.q;
   if (q) saveSettings({ quality: q });
@@ -633,6 +704,7 @@ api.onSnapshot((s) => {
   renderLimits();
   renderSub();
   renderBadges();
+  renderWaitQueue();
   renderFilters();
   renderGrid();
   renderMapCard();

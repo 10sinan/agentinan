@@ -191,6 +191,108 @@ body:not([data-tab='map']) #scene {
   pointer-events: auto;
 }
 
+/* waiting queue: a button in the top bar, a panel under it */
+.waitq-btn {
+  color: var(--waiting);
+  border-color: color-mix(in srgb, var(--waiting) 45%, transparent);
+  background: color-mix(in srgb, var(--waiting) 12%, transparent);
+  animation: waitq-pulse 2.4s ease-in-out infinite;
+}
+.waitq-btn[hidden] {
+  display: none;
+}
+.waitq-btn b {
+  margin-left: 6px;
+}
+.waitq-btn.open {
+  animation: none;
+  background: color-mix(in srgb, var(--waiting) 22%, transparent);
+}
+@keyframes waitq-pulse {
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--waiting) 18%, transparent);
+  }
+}
+.waitq {
+  position: absolute;
+  top: 66px;
+  right: 12px;
+  z-index: 40;
+  width: min(440px, calc(100% - 24px));
+  max-height: calc(100% - 90px);
+  overflow-y: auto;
+  border-radius: var(--r-lg);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.waitq[hidden] {
+  display: none;
+}
+.wq-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 6px;
+  color: var(--text-2);
+}
+.wq-head .ico {
+  color: var(--waiting);
+}
+.wq-row {
+  border: 1px solid var(--edge);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: color-mix(in srgb, var(--bg) 40%, transparent);
+}
+.wq-row.sent {
+  opacity: 0.6;
+}
+.wq-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.wq-top b {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wq-proj,
+.wq-ago {
+  font-size: 11px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.wq-what {
+  font: 600 12px var(--mono);
+  color: var(--waiting);
+}
+.wq-text {
+  font-size: 12.5px;
+  color: var(--text-2);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: pre-wrap;
+}
+.wq-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.wq-note {
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
 .topbar {
   height: 58px;
   flex-shrink: 0;
@@ -235,6 +337,12 @@ body:not([data-tab='map']) #scene {
   color: var(--text-3);
   white-space: nowrap;
   font-size: 12px;
+}
+#today {
+  cursor: pointer;
+}
+#today:hover .stat-chip {
+  background: var(--glass-hover);
 }
 .stat-chip b {
   color: var(--text);
@@ -2301,4 +2409,196 @@ body.overheat .rail .logo {
   min-width: 4.5ch;
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+/* ---------- spending history ---------- */
+.hist-box {
+  width: min(840px, calc(100vw - 48px));
+  max-height: calc(100vh - 60px);
+  overflow-y: auto;
+  position: relative;
+  gap: 12px;
+}
+.hist-title {
+  display: flex;
+  align-items: center;
+}
+.hist-wait {
+  padding: 60px 0;
+  text-align: center;
+  color: var(--text-3);
+}
+.hist-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.htile {
+  border: 1px solid var(--edge);
+  border-radius: 10px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.htile span {
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+.htile b {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.htile em {
+  font-style: normal;
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+.hist-sec-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+}
+.hist-sec-head h3 {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-2);
+}
+.hist-legend {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  color: var(--text-2);
+}
+.hist-legend span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.hist-legend i,
+.hist-tip .tt-row i {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  display: inline-block;
+}
+.hchart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.hchart .hg {
+  stroke: var(--edge);
+  stroke-width: 1;
+}
+.hchart .hbase {
+  stroke: var(--text-3);
+  stroke-width: 1;
+}
+.hchart .hax {
+  fill: var(--text-3);
+  font: 10.5px var(--mono);
+}
+.hchart .hhit {
+  fill: transparent;
+}
+.hchart .hhit:hover {
+  fill: color-mix(in srgb, var(--text) 6%, transparent);
+}
+.hist-tip {
+  position: absolute;
+  min-width: 180px;
+  pointer-events: none;
+  font-size: 12px;
+  z-index: 2;
+}
+.hist-tip[hidden] {
+  display: none;
+}
+.hist-tip .tt-head {
+  font-weight: 700;
+  margin-bottom: 6px;
+  color: var(--text);
+}
+.hist-tip .tt-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-2);
+}
+.hist-tip .tt-row b {
+  margin-left: auto;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.hist-tip .tt-total {
+  border-top: 1px solid var(--edge);
+  margin-top: 4px;
+  padding-top: 4px;
+}
+.hist-projects {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hp-row {
+  display: grid;
+  grid-template-columns: 150px 1fr 70px 40px;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+}
+.hp-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+.hp-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  overflow: hidden;
+}
+.hp-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+}
+.hp-row b {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.hp-row em {
+  font-style: normal;
+  text-align: right;
+  color: var(--text-3);
+}
+.hist-table-wrap {
+  max-height: 260px;
+  overflow-y: auto;
+}
+.hist-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.hist-table th,
+.hist-table td {
+  padding: 5px 8px;
+  text-align: right;
+  border-bottom: 1px solid var(--edge);
+  font-variant-numeric: tabular-nums;
+}
+.hist-table th:first-child,
+.hist-table td:first-child {
+  text-align: left;
+}
+.hist-table th {
+  color: var(--text-3);
+  font-weight: 600;
 }

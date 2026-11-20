@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld('agentinan', {
   copy: (text) => ipcRenderer.invoke('copy', text),
   refresh: () => ipcRenderer.invoke('refresh'),
   timeline: () => ipcRenderer.invoke('timeline'),
+  history: (days) => ipcRenderer.invoke('history', days),
+  onSettingsChanged: (fn) => ipcRenderer.on('settings-changed', () => fn()),
 
   // sessions Agentinan starts and talks to
   pickFolder: () => ipcRenderer.invoke('pick-folder'),
