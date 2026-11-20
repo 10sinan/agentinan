@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('agentinan', {
   openFolder: (dir) => ipcRenderer.invoke('open-folder', dir),
   copy: (text) => ipcRenderer.invoke('copy', text),
   refresh: () => ipcRenderer.invoke('refresh'),
+  timeline: () => ipcRenderer.invoke('timeline'),
 
   // sessions Agentinan starts and talks to
   pickFolder: () => ipcRenderer.invoke('pick-folder'),

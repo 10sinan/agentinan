@@ -191,6 +191,7 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.handle('open-folder', (_e, dir) => (typeof dir === 'string' && path.isAbsolute(dir) ? shell.openPath(dir) : 'bad path'));
     ipcMain.handle('copy', (_e, text) => clipboard.writeText(String(text)));
     ipcMain.handle('refresh', () => poll());
+    ipcMain.handle('timeline', () => collector.timeline());
     ipcMain.handle('pick-folder', async () => {
       const r = await dialog.showOpenDialog(win, { title: 'Claude hangi klasörde çalışsın?', properties: ['openDirectory'] });
       return r.canceled ? null : r.filePaths[0];

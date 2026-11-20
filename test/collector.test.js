@@ -3,7 +3,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { Transcript } = require('../src/collector');
+const { Transcript, Collector } = require('../src/collector');
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'agentinan-tr-'));
 test.after(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -98,4 +98,48 @@ test('a truncated/replaced file is re-read from scratch', () => {
 
 test('missing file does not throw', () => {
   assert.strictEqual(new Transcript(path.join(dir, 'nope.jsonl')).update(), false);
+});
+
+test('a Bash git commit / push is flagged on the tool for the map', () => {
+  const f = newFile();
+  const bash = (id, command) => ({ type: 'tool_use', id, name: 'Bash', input: { command, description: 'x' } });
+  fs.writeFileSync(
+    f,
+    asst('g', { output_tokens: 1 }, [
+      bash('b1', 'git add -A && git commit -m "push the button"'),
+      bash('b2', 'cd repo && git -C . push origin main'),
+      bash('b3', 'git status'),
+      bash('b4', 'echo git commit'),
+    ]),
+  );
+  const t = new Transcript(f);
+  t.update();
+  assert.deepStrictEqual(t.recentTools.map((x) => x.git || null), ['commit', 'push', null, null]);
+});
+
+test('timeline: active minutes of today, closed sessions too, subagents left out', () => {
+  const now = Date.now();
+  const iso = (ms) => new Date(ms).toISOString();
+  const userAt = (ms, extra = {}) => L({ type: 'user', timestamp: iso(ms), cwd: '/work/proj', message: { role: 'user', content: 'do it' }, ...extra });
+  const sid = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+  const f = path.join(dir, sid + '.jsonl');
+  const old = now - 3 * 86400000; // an earlier day: not part of today
+  fs.writeFileSync(f, userAt(old) + userAt(now - 120000) + userAt(now - 60000) + userAt(now - 30000, { isMeta: true }) + L({ type: 'ai-title', aiTitle: 'Başlık' }));
+  const subDir = path.join(dir, sid, 'subagents');
+  fs.mkdirSync(subDir, { recursive: true });
+  const sub = path.join(subDir, 'agent-x.jsonl');
+  fs.writeFileSync(sub, userAt(now - 60000));
+  const c = new Collector();
+  c.transcript(f);
+  c.transcript(sub);
+  const tl = c.timeline();
+  assert.strictEqual(tl.sessions.length, 1);
+  const s = tl.sessions[0];
+  assert.strictEqual(s.id, sid);
+  assert.strictEqual(s.name, 'Başlık');
+  assert.strictEqual(s.cwd, '/work/proj');
+  const m = (ms) => Math.floor(ms / 60000);
+  const expect = [...new Set([now - 120000, now - 60000].filter((x) => x >= tl.from).map(m))];
+  assert.deepStrictEqual(s.minutes, expect);
+  assert.ok(s.start <= now - 60000 && s.end >= now - 60000);
 });

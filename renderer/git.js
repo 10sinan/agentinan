@@ -149,6 +149,9 @@
     setMode('diff');
   });
 
+  // the map launches a comet from the planets working in this repository
+  const gitEvent = (action) => window.dispatchEvent(new CustomEvent('dash:git', { detail: { root: repo, action } }));
+
   // Eşitle: fetch, then pull (fast-forward only) if behind, then push if ahead; stops at the first error
   async function sync() {
     busy = true;
@@ -158,7 +161,9 @@
     let st = ok && (await call(G.status(repo)));
     if (st && st.behind) ok = (await call(G.pull(repo))) !== null;
     if (ok) st = await call(G.status(repo));
-    if (ok && st && st.ahead) ok = (await call(G.push(repo))) !== null;
+    const pushed = ok && st && st.ahead;
+    if (pushed) ok = (await call(G.push(repo))) !== null;
+    if (ok && pushed) gitEvent('push');
     busy = false;
     if (ok) D.toast('Eşitlendi');
     await refresh(true);
@@ -188,6 +193,7 @@
       $('gMsg').value = '';
       sel = null;
       D.toast('Commit atıldı');
+      gitEvent('commit');
     }
     await refresh(true);
     loadRepos();
