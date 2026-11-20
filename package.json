@@ -15,7 +15,7 @@
     "dist": "electron-builder --linux AppImage dir && sh scripts/build-rpm.sh"
   },
   "devDependencies": {
-    "electron": "^33.2.1",
+    "electron": "^45.4.1",
     "electron-builder": "^25.1.8"
   },
   "dependencies": {

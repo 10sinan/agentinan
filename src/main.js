@@ -64,8 +64,8 @@ function createWindow() {
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false },
   });
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
-  win.webContents.on('console-message', (_e, level, message, line, source) => {
-    if (level >= 2) console.error(`[page] ${message} (${source}:${line})`);
+  win.webContents.on('console-message', (e) => {
+    if (e.level === 'warning' || e.level === 'error') console.error(`[page] ${e.message} (${e.sourceId}:${e.lineNumber})`);
   });
   // with the tray on, closing the window only hides it: sessions are still watched and notifications still come
   win.on('close', (e) => {
