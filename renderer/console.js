@@ -98,7 +98,7 @@
     const items = list
       .map(
         (s) => `<div class="titem${s.control === current ? ' active' : ''}" data-id="${D.esc(s.id)}">
-          <i class="sdot ${s.status}"></i>
+          <i class="sdot ${D.esc(s.status)}"></i>
           <div class="tn"><b>${D.esc(s.name)}</b><span>${D.LABELS[s.status] || D.esc(s.status)} · ${D.esc(s.project)}</span></div>
         </div>`,
       )
@@ -134,7 +134,7 @@
     const s = list.find((x) => x.control === key);
     if (D.pickerOpen($('conTitle'))) return; // an open model menu would close on redraw
     $('conTitle').innerHTML = s
-      ? `<i class="sdot ${s.status}"></i><b>${D.esc(s.name)}</b><span class="pill ${s.status}">${D.LABELS[s.status] || D.esc(s.status)}${
+      ? `<i class="sdot ${D.esc(s.status)}"></i><b>${D.esc(s.name)}</b><span class="pill ${D.esc(s.status)}">${D.LABELS[s.status] || D.esc(s.status)}${
           s.status === 'waiting' && s.waitingFor ? ' · ' + D.esc(s.waitingFor) : ''
         }</span>${D.modelPicker(s)}`
       : `<i class="sdot busy"></i><b>Yeni oturum</b><span class="pill busy">Başlıyor…</span>`;

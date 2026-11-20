@@ -13,6 +13,8 @@ const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.cl
 const SESS_DIR = path.join(CLAUDE_DIR, 'sessions');
 const PROJ_DIR = path.join(CLAUDE_DIR, 'projects');
 const CHUNK = 4 * 1024 * 1024;
+const ID_RE = /^[A-Za-z0-9_-]{1,100}$/; // session and job ids: they end up in file paths and shell arguments
+const STATUS_RE = /^[a-z][a-z0-9_-]{0,19}$/i; // busy / idle / waiting; it ends up in CSS class names
 
 const dayKey = (ms) => {
   const d = new Date(ms);
@@ -542,7 +544,7 @@ class Collector {
     const sessions = [];
     for (const f of files) {
       const s = readJSON(path.join(SESS_DIR, f));
-      if (!s || !s.pid || !s.sessionId) continue;
+      if (!s || !Number.isInteger(s.pid) || s.pid <= 0 || typeof s.sessionId !== 'string' || !ID_RE.test(s.sessionId)) continue;
       const start = procStartTime(s.pid);
       if (start === null || (s.procStart && String(s.procStart) !== start)) continue; // process gone or pid reused
       const file = this.findTranscript(s.sessionId, s.cwd);
@@ -562,13 +564,13 @@ class Collector {
         title: t ? t.aiTitle : null,
         cwd,
         project: path.basename(cwd),
-        status: s.status || 'idle',
+        status: typeof s.status === 'string' && STATUS_RE.test(s.status) ? s.status : 'idle',
         waitingFor: s.waitingFor || null,
         statusSince: s.statusUpdatedAt || s.updatedAt || s.startedAt,
         startedAt: s.startedAt,
         entrypoint: s.entrypoint || '',
         kind: s.kind || 'interactive',
-        jobId: s.jobId || null,
+        jobId: typeof s.jobId === 'string' && ID_RE.test(s.jobId) ? s.jobId : null,
         version: s.version || '',
         model: t && t.model ? prettyModel(t.model) : null,
         tokens: { ...tot.usage, total: totalTokens(tot.usage) },

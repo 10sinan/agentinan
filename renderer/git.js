@@ -128,7 +128,7 @@
     const active = sel && sel.path === f.path && sel.kind === kind && mode === 'diff' ? ' active' : '';
     return `<div class="frow${active}" data-path="${esc(f.path)}" data-kind="${kind}" title="${esc((f.from ? f.from + ' → ' : '') + f.path)}">
       <span class="fname">${esc(name)}</span><span class="fdir">${esc(dir)}</span>
-      <span class="fcode c-${f.code}" title="${CODE[f.code] || f.code}">${esc(f.code)}</span>
+      <span class="fcode c-${esc(f.code)}" title="${esc(CODE[f.code] || f.code)}">${esc(f.code)}</span>
     </div>`;
   }
 
@@ -330,7 +330,7 @@
           : `<div class="hrow gonly"><span class="hgraph" ${gw}>${graphHtml(r.graph.trimEnd())}</span></div>`,
       )
       .join('');
-    setBody(`<div class="hist">${html}</div>`, `${icon('history')}<b class="plain">Geçmiş</b><span>${repos.find((r) => r.root === repo)?.name || ''} · tüm dallar</span>`);
+    setBody(`<div class="hist">${html}</div>`, `${icon('history')}<b class="plain">Geçmiş</b><span>${esc(repos.find((r) => r.root === repo)?.name || '')} · tüm dallar</span>`);
   }
 
   async function showCommit(hash) {

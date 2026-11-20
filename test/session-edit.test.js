@@ -87,3 +87,22 @@ test('deleteSession only unlinks a subagent folder that is a symlink to elsewher
   assert.ok(!fs.existsSync(path.join(projDir, SID)));
   assert.strictEqual(fs.readFileSync(path.join(other, 'precious.txt'), 'utf8'), 'keep');
 });
+
+test('snapshot ignores session files with a bad pid or id and cleans status and job id', () => {
+  const dir = path.join(home, 'sessions');
+  fs.rmSync(dir, { recursive: true, force: true });
+  fs.mkdirSync(dir, { recursive: true });
+  const base = { sessionId: SID, cwd, startedAt: 1 };
+  fs.writeFileSync(path.join(dir, 'a.json'), JSON.stringify({ ...base, pid: process.pid, status: '"><img src=x onerror=alert(1)>', jobId: '../../x' }));
+  fs.writeFileSync(path.join(dir, 'b.json'), JSON.stringify({ ...base, pid: '../../etc/passwd' })); // not a number
+  fs.writeFileSync(path.join(dir, 'c.json'), JSON.stringify({ ...base, pid: process.pid, sessionId: '../../evil' })); // not an id
+  fs.writeFileSync(path.join(dir, 'd.json'), JSON.stringify({ ...base, pid: -5 }));
+  const snap = new Collector().snapshot();
+  assert.strictEqual(snap.sessions.length, 1);
+  assert.strictEqual(snap.sessions[0].status, 'idle');
+  assert.strictEqual(snap.sessions[0].jobId, null);
+  fs.writeFileSync(path.join(dir, 'a.json'), JSON.stringify({ ...base, pid: process.pid, status: 'waiting', jobId: 'job_1-a' }));
+  const ok = new Collector().snapshot().sessions[0];
+  assert.strictEqual(ok.status, 'waiting');
+  assert.strictEqual(ok.jobId, 'job_1-a');
+});
