@@ -178,6 +178,26 @@ function annotate(snap) {
   }
   return snap;
 }
+// Sessions Agentinan runs itself end with the app; remember them so the next start can resume them.
+const ownFile = () => path.join(app.getPath('userData'), 'own-sessions.json');
+function saveOwnSessions() {
+  if (!lastSnap) return; // never polled (e.g. a second instance that quit at once): keep the saved list
+  try {
+    const own = terminals.ownPids();
+    const list = (lastSnap?.sessions || []).filter((s) => own.has(s.pid)).map((s) => ({ id: s.id, cwd: s.cwd }));
+    fs.writeFileSync(ownFile(), JSON.stringify(list));
+  } catch (e) {
+    console.error('own sessions not saved', e);
+  }
+}
+function restoreOwnSessions() {
+  let list = [];
+  try {
+    list = JSON.parse(fs.readFileSync(ownFile(), 'utf8'));
+    fs.unlinkSync(ownFile());
+  } catch {}
+  if (Array.isArray(list)) for (const s of list.slice(0, 20)) terminals.resume(s?.id, s?.cwd);
+}
 let prev = null; // sessionId → status from the last poll
 let lastSnap = null;
 const gitApi = new Git();
@@ -394,6 +414,7 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.on('term:input', (_e, { key, data }) => terminals.write(String(key), data));
     ipcMain.on('term:line', (_e, { key, text }) => terminals.sendLine(String(key), text));
     ipcMain.on('term:resize', (_e, { key, cols, rows }) => terminals.resize(String(key), cols | 0, rows | 0));
+    restoreOwnSessions();
     createWindow();
     createTray();
     win.webContents.on('did-finish-load', poll);
@@ -416,6 +437,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('before-quit', () => (quitting = true));
   app.on('window-all-closed', () => app.quit());
   app.on('will-quit', () => {
+    saveOwnSessions();
     terminals.disposeAll();
     shells.disposeAll();
   }); // background sessions keep running; we only detach
