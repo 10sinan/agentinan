@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { Collector } = require('./collector');
 const { Terminals } = require('./terminals');
+const { Shells } = require('./shells');
 const { Git } = require('./git');
 const { Monitor } = require('./monitor');
 const { Limits } = require('./limits');
@@ -76,9 +77,11 @@ function notify(title, body, sessionId) {
 }
 
 const collector = new Collector();
-const terminals = new Terminals((ch, payload) => {
+const toWindow = (ch, payload) => {
   if (win && !win.isDestroyed()) win.webContents.send(ch, payload);
-});
+};
+const terminals = new Terminals(toWindow);
+const shells = new Shells(toWindow); // the plain terminals in the bottom drawer
 
 // Marks the sessions Agentinan can send commands to: background sessions, and the ones it runs itself.
 function annotate(snap) {
@@ -299,6 +302,10 @@ if (!app.requestSingleInstanceLock()) {
         return settings;
       }),
     );
+    ipcMain.handle('shell:open', wrap((cwd) => shells.open(cwd)));
+    ipcMain.on('shell:input', (_e, { id, data }) => shells.write(String(id), data));
+    ipcMain.on('shell:resize', (_e, { id, cols, rows }) => shells.resize(String(id), cols | 0, rows | 0));
+    ipcMain.on('shell:close', (_e, id) => shells.close(String(id)));
     ipcMain.on('term:input', (_e, { key, data }) => terminals.write(String(key), data));
     ipcMain.on('term:line', (_e, { key, text }) => terminals.sendLine(String(key), text));
     ipcMain.on('term:resize', (_e, { key, cols, rows }) => terminals.resize(String(key), cols | 0, rows | 0));
@@ -321,5 +328,8 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.on('window-all-closed', () => app.quit());
-  app.on('will-quit', () => terminals.disposeAll()); // background sessions keep running; we only detach
+  app.on('will-quit', () => {
+    terminals.disposeAll();
+    shells.disposeAll();
+  }); // background sessions keep running; we only detach
 }

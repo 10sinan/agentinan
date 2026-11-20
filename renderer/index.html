@@ -33,6 +33,7 @@
           </div>
           <div class="limits" id="limits"></div>
           <div class="today" id="today"></div>
+          <button class="btn" id="dockBtn" title="Terminal çekmecesi (Ctrl+`)"><i data-icon="terminal"></i>Terminal</button>
           <button class="btn primary" id="newBtn" title="Agentinan'dan başlatılan oturumlara komut verebilirsin"><i data-icon="plus"></i>Yeni oturum</button>
         </header>
 
@@ -189,6 +190,16 @@
             </div>
           </div>
         </section>
+
+        <!-- a plain terminal drawer for running projects (dock.js) -->
+        <div class="dock glass" id="dock" hidden>
+          <div class="dock-grip" id="dockGrip" title="Boyutu değiştirmek için sürükle"></div>
+          <div class="dock-head">
+            <div class="dock-tabs" id="dockTabs"></div>
+            <button class="btn sm ghost icon-only" id="dockHide" title="Gizle (Ctrl+`). Terminaller çalışmaya devam eder"><i data-icon="down"></i></button>
+          </div>
+          <div class="dock-terms" id="dockTerms"></div>
+        </div>
       </div>
     </div>
 
@@ -254,6 +265,7 @@
     <script src="themes.js"></script>
     <script src="app.js"></script>
     <script src="console.js"></script>
+    <script src="dock.js"></script>
     <script src="git.js"></script>
     <script src="hog.js"></script>
     <script type="module" src="orbit3d.js"></script>
