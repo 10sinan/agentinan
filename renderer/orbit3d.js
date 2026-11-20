@@ -163,6 +163,86 @@ const sunLabel = new CSS2DObject(sunLabelEl);
 sunLabel.position.set(0, -44, 0);
 sunGroup.add(sunLabel);
 
+// corona: soft rays that turn slowly behind the sun
+function coronaTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d');
+  g.translate(128, 128);
+  for (let i = 0; i < 36; i++) {
+    const a = (i / 36) * Math.PI * 2 + Math.random() * 0.1;
+    const len = 70 + Math.random() * 58;
+    const w = 0.035 + Math.random() * 0.05;
+    const grd = g.createRadialGradient(0, 0, 18, 0, 0, len);
+    grd.addColorStop(0, 'rgba(255,255,255,0.55)');
+    grd.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = grd;
+    g.beginPath();
+    g.moveTo(0, 0);
+    g.arc(0, 0, len, a - w, a + w);
+    g.closePath();
+    g.fill();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const corona = new THREE.Sprite(new THREE.SpriteMaterial({ map: coronaTexture(), color: '#ffb340', transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending }));
+corona.scale.setScalar(250);
+sunGroup.add(corona);
+const sunHalo2 = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: '#ffe2a8', transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending }));
+sunHalo2.scale.setScalar(80);
+sunGroup.add(sunHalo2);
+
+// dust disc: a faint, slowly turning haze of particles around the sun, thicker toward the middle
+const DUST = 1400;
+const dustPos = new Float32Array(DUST * 3);
+for (let i = 0; i < DUST; i++) {
+  const r = 55 + Math.pow(Math.random(), 1.8) * 700;
+  const a = Math.random() * Math.PI * 2;
+  dustPos.set([Math.cos(a) * r, (Math.random() - 0.5) * (6 + r * 0.04), Math.sin(a) * r], i * 3);
+}
+const dustGeo = new THREE.BufferGeometry();
+dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
+const dust = new THREE.Points(dustGeo, new THREE.PointsMaterial({ size: 2.6, map: GLOW, color: '#9fb0e8', transparent: true, opacity: 0.35, depthWrite: false, blending: THREE.AdditiveBlending }));
+scene.add(dust);
+
+// shooting stars: now and then one streaks across the far sky
+const SHOOTERS = Array.from({ length: 3 }, () => {
+  const geo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]);
+  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: '#cfe0ff', transparent: true, opacity: 0, depthWrite: false, fog: false, blending: THREE.AdditiveBlending }));
+  line.frustumCulled = false;
+  scene.add(line);
+  return { line, born: 0, life: 0, from: new THREE.Vector3(), vel: new THREE.Vector3() };
+});
+let nextShooter = 3;
+function updateShooters(t, dt) {
+  nextShooter -= dt;
+  if (nextShooter <= 0) {
+    nextShooter = 4 + Math.random() * 7;
+    const sh = SHOOTERS.find((x) => t - x.born > x.life);
+    if (sh) {
+      sh.born = t;
+      sh.life = 0.9 + Math.random() * 0.5;
+      sh.from.randomDirection().multiplyScalar(1700 + Math.random() * 600);
+      sh.vel.randomDirection().multiplyScalar(900 + Math.random() * 500);
+    }
+  }
+  for (const sh of SHOOTERS) {
+    const k = (t - sh.born) / sh.life;
+    if (k < 0 || k > 1) {
+      sh.line.material.opacity = 0;
+      continue;
+    }
+    const head = tmp.copy(sh.from).addScaledVector(sh.vel, t - sh.born);
+    const pos = sh.line.geometry.attributes.position;
+    pos.setXYZ(1, head.x, head.y, head.z);
+    pos.setXYZ(0, head.x - sh.vel.x * 0.14, head.y - sh.vel.y * 0.14, head.z - sh.vel.z * 0.14);
+    pos.needsUpdate = true;
+    sh.line.material.opacity = Math.sin(k * Math.PI) * 0.85;
+  }
+}
+
 // ---------- planets ----------
 const STATUS = {
   busy: new THREE.Color(D.COLORS.busy),
@@ -172,6 +252,7 @@ const STATUS = {
 const HOT_A = new THREE.Color('#ff2a12');
 const HOT_B = new THREE.Color('#ffd25a');
 const HOT = new THREE.Color();
+const WHITE = new THREE.Color('#ffffff');
 const ORBIT = { line: new THREE.Color('#7d8cc4'), selected: new THREE.Color('#a78bfa') };
 
 // Theme: space colour, status colours (planets ease toward them), orbit lines.
@@ -195,6 +276,13 @@ function hash(str) {
   return h >>> 0;
 }
 
+// atmosphere: a rim glow that hugs the planet's edge (strongest where we look across the surface)
+const ATMO_VS = `varying vec3 vN; varying vec3 vV;
+void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`;
+const ATMO_FS = `uniform vec3 uColor; uniform float uAlpha; varying vec3 vN; varying vec3 vV;
+void main() { float f = pow(1.0 - max(dot(vN, vV), 0.0), 2.6); gl_FragColor = vec4(uColor * (0.6 + f), f * uAlpha); }`;
+const ATMO_GEO = new THREE.SphereGeometry(1, 40, 28);
+
 function makePlanet(s) {
   const h = hash(s.id);
   const group = new THREE.Group();
@@ -203,6 +291,12 @@ function makePlanet(s) {
   mesh.userData.id = s.id;
   group.add(mesh);
   pickables.push(mesh);
+
+  const atmo = new THREE.Mesh(
+    ATMO_GEO,
+    new THREE.ShaderMaterial({ vertexShader: ATMO_VS, fragmentShader: ATMO_FS, uniforms: { uColor: { value: new THREE.Color() }, uAlpha: { value: 0.9 } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }),
+  );
+  group.add(atmo);
 
   const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending }));
   group.add(halo);
@@ -235,7 +329,7 @@ function makePlanet(s) {
   // orbit path, slightly tilted so the system has depth
   const orbit = new THREE.Line(
     new THREE.BufferGeometry(),
-    new THREE.LineBasicMaterial({ color: '#7d8cc4', transparent: true, opacity: 0.18, depthWrite: false }),
+    new THREE.LineBasicMaterial({ color: '#7d8cc4', vertexColors: true, transparent: true, opacity: 0.18, depthWrite: false }),
   );
   scene.add(orbit);
 
@@ -262,6 +356,7 @@ function makePlanet(s) {
     id: s.id,
     group,
     mesh,
+    atmo,
     halo,
     ring,
     pulse,
@@ -288,7 +383,7 @@ function disposePlanet(p) {
   for (const o of [p.group, p.pulse, p.sel, p.orbit, p.trail]) {
     scene.remove(o);
     o.traverse?.((x) => {
-      x.geometry?.dispose();
+      x.geometry !== ATMO_GEO && x.geometry !== MOON_GEO && x.geometry?.dispose();
       x.material?.map && x.material.map !== GLOW && x.material.map.dispose();
       x.material?.dispose();
     });
@@ -309,6 +404,22 @@ function setOrbitGeometry(p) {
   const v = new THREE.Vector3();
   for (let i = 0; i <= 128; i++) pts.push(orbitPoint(p, (i / 128) * Math.PI * 2, v).clone());
   p.orbit.geometry.setFromPoints(pts);
+  p.orbit.geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(pts.length * 3).fill(1), 3));
+}
+
+// the orbit line glows brightest right behind its planet and fades along the path it has already travelled
+function shadeOrbit(p) {
+  const col = p.orbit.geometry.attributes.color;
+  if (!col) return;
+  const n = col.count - 1;
+  const TAU = Math.PI * 2;
+  const head = ((p.angle % TAU) + TAU) % TAU;
+  for (let i = 0; i <= n; i++) {
+    const behind = (((head - (i / n) * TAU) % TAU) + TAU) % TAU / TAU; // 0 at the planet, →1 all the way round
+    const v = 0.3 + 0.7 * (1 - behind) ** 4;
+    col.setXYZ(i, v, v, v);
+  }
+  col.needsUpdate = true;
 }
 
 // planet size follows how much Claude has written in the session (output tokens)
@@ -508,6 +619,12 @@ function animate(now = 0) {
   const busy = [...planets.values()].some((p) => p.status === 'busy');
   sunHalo.scale.setScalar(190 + Math.sin(t * (busy ? 2.4 : 0.9)) * (busy ? 14 : 5));
   stars.rotation.y += dt * 0.004;
+  corona.material.rotation += dt * 0.025;
+  corona.material.opacity = (busy ? 0.62 : 0.45) + Math.sin(t * 1.3) * 0.05;
+  corona.scale.setScalar(250 + Math.sin(t * (busy ? 2 : 0.8)) * 10);
+  sunHalo2.scale.setScalar(80 + Math.sin(t * 1.7) * 4);
+  dust.rotation.y += dt * 0.006;
+  updateShooters(t, dt);
 
   const selected = D.selected();
   for (const p of planets.values()) {
@@ -531,6 +648,9 @@ function animate(now = 0) {
     p.mesh.material.color.copy(p.color);
     p.mesh.material.emissive.copy(p.color).multiplyScalar(p.hot ? 0.95 : p.status === 'idle' ? 0.12 : 0.32);
     p.halo.material.color.copy(p.color);
+    p.atmo.scale.setScalar(p.mesh.scale.x * 1.17);
+    p.atmo.material.uniforms.uColor.value.copy(p.color).lerp(WHITE, 0.25);
+    p.atmo.material.uniforms.uAlpha.value = p.hot ? 1.4 : p.status === 'idle' ? 0.55 : 1;
     p.halo.scale.setScalar(p.size * (p.hot ? 8 + Math.sin(t * 7) * 1.4 : p.status === 'idle' ? 3.2 : 4.4 + Math.sin(t * 3) * 0.3));
     p.halo.material.opacity = p.hot ? 0.9 : p.status === 'idle' ? 0.35 : 0.6;
 
@@ -552,7 +672,8 @@ function animate(now = 0) {
     p.sel.position.copy(p.group.position);
     p.sel.quaternion.copy(camera.quaternion);
     p.sel.scale.setScalar(p.size * 1.45);
-    p.orbit.material.opacity = p.id === selected ? 0.55 : 0.18;
+    shadeOrbit(p);
+    p.orbit.material.opacity = p.id === selected ? 0.7 : 0.3;
     p.orbit.material.color.copy(p.id === selected ? ORBIT.selected : ORBIT.line);
 
     // comet trail
