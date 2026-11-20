@@ -867,6 +867,46 @@ textarea:focus {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.spark.git {
+  color: #ffe9a8;
+}
+.spark.compact {
+  color: #cfd8ff;
+}
+
+/* replay of the day: a button, then a time bar, at the top of the map */
+.replay-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+.replay-bar {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(520px, calc(100% - 32px));
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 999px;
+}
+.replay-bar[hidden],
+.replay-btn[hidden] {
+  display: none;
+}
+.replay-bar input[type='range'] {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--accent);
+}
+.replay-time {
+  font: 700 12px var(--mono);
+  color: var(--text);
+  min-width: 42px;
+  text-align: right;
+}
 
 /* ---------- sessions view: a table ---------- */
 .view[data-view='sessions'] .panel {

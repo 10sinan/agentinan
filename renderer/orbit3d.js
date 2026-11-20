@@ -274,6 +274,10 @@ function applyTheme(t) {
 }
 window.addEventListener('dash:theme', (e) => applyTheme(e.detail));
 const planets = new Map(); // session id → planet object
+const dying = []; // closed sessions' planets, spiralling into the sun before they are disposed
+let firstLayout = true; // the first snapshot only places planets: nothing is born or finished then
+let sunFlash = 0; // 1 → 0: the sun flares when a planet is born from it or falls into it
+let replay = null; // the replay of the day, while it runs (see the replay section)
 const pickables = [];
 
 function hash(str) {
@@ -335,6 +339,13 @@ function makePlanet(s) {
   );
   scene.add(shock);
 
+  // context: an arc that fills (green → yellow → red) as the conversation's context grows
+  const ctx = new THREE.Mesh(
+    new THREE.RingGeometry(1.3, 1.38, 64, 1, 0, 0.001),
+    new THREE.MeshBasicMaterial({ color: '#5ee08a', transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false }),
+  );
+  scene.add(ctx);
+
   // selection ring
   const sel = new THREE.Mesh(
     new THREE.RingGeometry(1.0, 1.06, 64),
@@ -378,6 +389,9 @@ function makePlanet(s) {
     pulse,
     shock,
     sel,
+    ctx,
+    ctxPct: -1,
+    lastCtx: s.context || 0,
     orbit,
     trail,
     trailN: TRAIL,
@@ -398,7 +412,7 @@ function makePlanet(s) {
 }
 
 function disposePlanet(p) {
-  for (const o of [p.group, p.pulse, p.shock, p.sel, p.orbit, p.trail]) {
+  for (const o of [p.group, p.pulse, p.shock, p.sel, p.ctx, p.orbit, p.trail]) {
     scene.remove(o);
     o.traverse?.((x) => {
       x.geometry !== ATMO_GEO && x.geometry !== MOON_GEO && x.geometry?.dispose();
@@ -408,7 +422,37 @@ function disposePlanet(p) {
   }
   p.group.remove(p.label);
   p.el.remove();
-  pickables.splice(pickables.indexOf(p.mesh), 1);
+  const i = pickables.indexOf(p.mesh);
+  if (i >= 0) pickables.splice(i, 1);
+}
+
+// A closed session's planet is not removed at once: it spirals into the sun (animate) and is disposed there.
+function retire(p) {
+  const i = pickables.indexOf(p.mesh);
+  if (i >= 0) pickables.splice(i, 1);
+  p.group.remove(p.label);
+  p.el.remove();
+  if (drag && drag.p === p) drag = null;
+  p.diedAt = performance.now();
+  p.fromPos = p.group.position.clone();
+  for (const o of [p.pulse, p.shock, p.sel, p.trail]) o.visible = false;
+  dying.push(p);
+}
+
+// The context arc; a big drop in context is a compaction, shown as a dust burst.
+const CTX_COL = { ok: new THREE.Color('#5ee08a'), mid: new THREE.Color('#ffc94a'), full: new THREE.Color('#ff5a4a') };
+function setContext(p, s) {
+  if (!s.replay) {
+    if (!firstLayout && p.lastCtx >= 40_000 && s.context < p.lastCtx * 0.5) compactBurst(p);
+    p.lastCtx = s.context;
+  }
+  const pct = s.context ? Math.min(1, s.context / D.ctxLimit(s)) : 0;
+  if (Math.abs(pct - p.ctxPct) < 0.01) return;
+  p.ctxPct = pct;
+  const th = Math.max(0.001, pct * Math.PI * 2);
+  p.ctx.geometry.dispose();
+  p.ctx.geometry = new THREE.RingGeometry(1.3, 1.38, 64, 1, Math.PI / 2 - th, th); // fills clockwise from the top
+  p.ctx.material.color.copy(pct < 0.6 ? CTX_COL.ok : pct < 0.85 ? CTX_COL.mid : CTX_COL.full);
 }
 
 function orbitPoint(p, a, out) {
@@ -447,7 +491,13 @@ function layout(sessions) {
   const n = sessions.length;
   sessions.forEach((s, i) => {
     let p = planets.get(s.id);
-    if (!p) planets.set(s.id, (p = makePlanet(s)));
+    if (!p) {
+      planets.set(s.id, (p = makePlanet(s)));
+      if (!firstLayout) {
+        p.bornAt = performance.now();
+        sunFlash = 1;
+      }
+    }
     p.s = s;
     const r = 120 + i * Math.max(62, Math.min(95, 360 / Math.max(1, n)));
     if (Math.abs(p.radius - r) > 0.5) {
@@ -455,15 +505,19 @@ function layout(sessions) {
       setOrbitGeometry(p);
     }
     p.size = planetSize(s);
-    if (p.status !== s.status) p.statusChangedAt = performance.now();
+    if (p.status !== s.status) {
+      p.statusChangedAt = performance.now();
+      if (!firstLayout && p.status === 'busy' && s.status === 'idle') celebrate(p);
+    }
     p.status = s.status;
+    setContext(p, s);
     const waiting = s.status === 'waiting' && s.waitingFor ? ` · ${D.esc(s.waitingFor)}` : '';
     p.el.style.setProperty('--proj', `hsl(${projectHue(s.cwd)} 70% 62%)`);
     p.el.className = `planet-label ${s.status}${s.id === D.selected() ? ' sel' : ''}`;
     p.el.innerHTML = `<b>${s.control ? '<i class="ctl">›_</i>' : ''}${D.esc(s.name)}</b><span>${D.LABELS[s.status] || D.esc(s.status)}${waiting} · ${D.fmtTok(s.context)} bağlam</span>`;
     syncMoons(p, s.subagents.filter((a) => a.active).length);
     // a process this session started is straining the PC: the planet overheats
-    const hog = D.hogs().find((h) => h.sessionId === s.id);
+    const hog = s.replay ? null : D.hogs().find((h) => h.sessionId === s.id);
     p.hot = !!hog;
     p.el.classList.toggle('hot', p.hot);
     if (hog) p.el.innerHTML += `<em class="heat">AŞIRI ISINMA · ${D.esc(hog.name)} %${hog.cpu}</em>`;
@@ -471,29 +525,32 @@ function layout(sessions) {
   const live = new Set(sessions.map((s) => s.id));
   for (const [id, p] of planets) {
     if (!live.has(id)) {
-      disposePlanet(p);
       planets.delete(id);
+      retire(p);
     }
   }
   const snap = D.snap();
-  sunLabelEl.innerHTML = `<b>${sessions.length}</b> oturum · bugün ${D.fmtCost(snap.today.cost)}`;
-  document.getElementById('empty3d').hidden = sessions.length > 0;
+  sunLabelEl.innerHTML = replay
+    ? `<b>${sessions.length}</b> oturum · saat ${hhmm(replay.T)}`
+    : `<b>${sessions.length}</b> oturum · bugün ${D.fmtCost(snap.today.cost)}`;
+  document.getElementById('empty3d').hidden = sessions.length > 0 || !!replay;
+  firstLayout = false;
 }
 
 const MOON_GEO = new THREE.SphereGeometry(1, 16, 12);
+// A new subagent's moon shoots out of its planet; a finished one dives back in (animate removes it then).
 function syncMoons(p, n) {
-  while (p.moons.length < n) {
+  const staying = p.moons.filter((m) => !m.userData.leaving);
+  while (staying.length < n) {
     const m = new THREE.Mesh(MOON_GEO, new THREE.MeshStandardMaterial({ color: '#dfe5f5', roughness: 0.9, emissive: '#3a4466' }));
     m.userData.phase = Math.random() * Math.PI * 2;
     m.userData.tilt = Math.random() * 0.9 - 0.45;
+    m.userData.born = firstLayout ? 0 : performance.now();
     p.group.add(m);
     p.moons.push(m);
+    staying.push(m);
   }
-  while (p.moons.length > n) {
-    const m = p.moons.pop();
-    p.group.remove(m);
-    m.material.dispose();
-  }
+  while (staying.length > n) staying.pop().userData.leaving = performance.now();
 }
 
 // ---------- tool sparks: the tool a session just ran drifts up from its planet ----------
@@ -510,15 +567,20 @@ function spawnSparks(sessions) {
       if (firstSnap || now - t.ts > 20000) continue;
       const p = planets.get(s.id);
       if (!p) continue;
-      const el = document.createElement('div');
-      el.className = 'spark';
-      el.textContent = t.brief ? `${t.name} · ${t.brief}` : t.name;
-      const obj = new CSS2DObject(el);
-      scene.add(obj);
-      sparks.push({ obj, el, p, born: performance.now(), off: sparks.filter((x) => x.p === p).length });
+      addSpark(p, t.brief ? `${t.name} · ${t.brief}` : t.name);
+      if (t.git) launchComet(p, t.git);
     }
   }
   firstSnap = false;
+}
+
+function addSpark(p, text, cls = '') {
+  const el = document.createElement('div');
+  el.className = cls ? `spark ${cls}` : 'spark';
+  el.textContent = text;
+  const obj = new CSS2DObject(el);
+  scene.add(obj);
+  sparks.push({ obj, el, p, born: performance.now(), off: sparks.filter((x) => x.p === p).length });
 }
 
 // ---------- links between planets ----------
@@ -773,7 +835,7 @@ const endDrag = (e) => {
   labels.domElement.style.cursor = 'grab';
   if (!active || e.type !== 'pointerup') return; // a cancelled drag or a lost window never acts
   const target = dropTargetOf(p);
-  if (target) window.dispatchEvent(new CustomEvent('dash:drop', { detail: { id: p.id, target } }));
+  if (target && !replay) window.dispatchEvent(new CustomEvent('dash:drop', { detail: { id: p.id, target } }));
 };
 window.addEventListener('pointerup', endDrag);
 window.addEventListener('pointercancel', endDrag);
@@ -786,7 +848,45 @@ labels.domElement.addEventListener('pointerup', (e) => {
 
 // Fly the camera's focus toward the selected planet; back to the sun when nothing is selected.
 const focus = new THREE.Vector3();
-window.addEventListener('dash:select', () => layout(D.snap().sessions));
+window.addEventListener('dash:select', () => layout(replay ? replaySessions() : D.snap().sessions));
+
+// ---------- double click and keyboard ----------
+function openTerminal(id) {
+  const s = D.snap().sessions.find((x) => x.id === id);
+  if (!s) return;
+  D.select(id);
+  if (s.control) D.setTab('terminal');
+  else D.toast('Bu oturum Agentinan dışında açıldı; terminali burada yok');
+}
+labels.domElement.addEventListener('dblclick', (e) => {
+  const id = !replay && pick(e);
+  if (id) openTerminal(id);
+});
+document.addEventListener('keydown', (e) => {
+  if (D.tab() !== 'map' || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (document.activeElement?.matches('input, textarea, select, [contenteditable="true"]')) return;
+  if (document.querySelector('.modal:not([hidden])')) return;
+  const sel = D.selected();
+  if (e.key === 'Tab') {
+    // planets in orbit order, nearest the sun first
+    const order = [...planets.values()].sort((a, b) => a.radius - b.radius).map((p) => p.id);
+    if (!order.length) return;
+    e.preventDefault();
+    const i = order.indexOf(sel);
+    const next = i < 0 ? (e.shiftKey ? order.length - 1 : 0) : (i + (e.shiftKey ? -1 : 1) + order.length) % order.length;
+    D.select(order[next], true);
+  } else if (e.key === ' ') {
+    e.preventDefault();
+    if (replay) togglePlay();
+    else D.select(null);
+  } else if (e.key === 'Enter' && sel && !replay) {
+    e.preventDefault();
+    openTerminal(sel);
+  } else if (e.key === 'Escape') {
+    if (replay) stopReplay();
+    else if (sel) D.select(null);
+  }
+});
 
 // ---------- embers: sparks flying off an overheating planet ----------
 const EMBERS = 180;
@@ -833,6 +933,261 @@ function updateEmbers(dt) {
   col.needsUpdate = true;
 }
 
+// ---------- one-off effects: rings, comets, dust bursts ----------
+const FX_RING_GEO = new THREE.RingGeometry(0.9, 1, 64);
+const GOLD = new THREE.Color('#ffd25a');
+const rings = [];
+function ringFx(p, color, life, from, to, opacity = 1) {
+  const mesh = new THREE.Mesh(
+    FX_RING_GEO,
+    new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }),
+  );
+  scene.add(mesh);
+  rings.push({ mesh, p, born: performance.now(), life, from, to, opacity });
+}
+
+// a session finished its work: a golden ring rolls out and the planet flares
+function celebrate(p) {
+  p.doneAt = performance.now();
+  ringFx(p, GOLD, 1600, 1.2, 7, 1);
+  ringFx(p, '#fff4d6', 900, 1.1, 3.5, 0.8);
+}
+
+// a commit: a comet rises from the planet and fades; a push: it flies off out of the system
+const COMET_N = 16;
+const comets = [];
+function launchComet(p, kind) {
+  const push = kind === 'push';
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(COMET_N * 3), 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(COMET_N * 3), 3));
+  const pts = new THREE.Points(
+    geo,
+    new THREE.PointsMaterial({ size: push ? 16 : 12, map: GLOW, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }),
+  );
+  pts.frustumCulled = false;
+  scene.add(pts);
+  const out = new THREE.Vector3().copy(p.group.position).setY(0);
+  if (out.lengthSq() < 1) out.set(1, 0, 0);
+  out.normalize();
+  const dir = out
+    .multiplyScalar(push ? 0.9 : 0.5)
+    .add(new THREE.Vector3((Math.random() - 0.5) * 0.4, push ? 0.5 : 0.9, (Math.random() - 0.5) * 0.4))
+    .normalize();
+  const side = new THREE.Vector3().crossVectors(dir, UP).normalize();
+  const color = push ? '#bfe0ff' : '#ffe9a8';
+  comets.push({ pts, start: p.group.position.clone(), dir, side, push, born: performance.now(), life: push ? 3800 : 2600, hist: [], color: new THREE.Color(color) });
+  ringFx(p, color, 700, 1.1, 2.8, 0.9);
+  addSpark(p, push ? '⇡ push' : '✓ commit', 'git');
+}
+// commits and pushes made from the Git tab (git.js) launch from every planet working in that repository
+window.addEventListener('dash:git', (e) => {
+  const { root, action } = e.detail || {};
+  if (!root || replay) return;
+  for (const p of planets.values()) if (p.s.cwd === root || p.s.cwd.startsWith(root + '/')) launchComet(p, action);
+});
+
+// the context was compacted: the context arc scatters as dust
+const bursts = [];
+function compactBurst(p) {
+  ringFx(p, '#cfd8ff', 1200, 1.3, 4, 0.7);
+  addSpark(p, '◌ bağlam sıkıştırıldı', 'compact');
+  if (D.settings().quality === 'low') return;
+  const N = 120;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(N * 3), 3));
+  const colors = new Float32Array(N * 3);
+  const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
+  const up = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 1);
+  const r = p.size * 1.34;
+  const base = p.ctx.material.color;
+  const c = new THREE.Color();
+  const parts = [];
+  for (let i = 0; i < N; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const d = new THREE.Vector3().addScaledVector(right, Math.cos(a)).addScaledVector(up, Math.sin(a));
+    const v = d
+      .clone()
+      .multiplyScalar(30 + Math.random() * 90)
+      .add(new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(30));
+    parts.push({ o: d.multiplyScalar(r), v });
+    c.copy(base).lerp(WHITE, Math.random() * 0.6);
+    colors.set([c.r, c.g, c.b], i * 3);
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  const pts = new THREE.Points(
+    geo,
+    new THREE.PointsMaterial({ size: 6, map: GLOW, vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }),
+  );
+  pts.frustumCulled = false;
+  scene.add(pts);
+  bursts.push({ pts, parts, center: p.group.position.clone(), born: performance.now(), life: 2000 });
+}
+
+function updateFx(now) {
+  for (let i = rings.length - 1; i >= 0; i--) {
+    const r = rings[i];
+    const k = Math.max(0, (now - r.born) / r.life);
+    if (k >= 1) {
+      scene.remove(r.mesh);
+      r.mesh.material.dispose();
+      rings.splice(i, 1);
+      continue;
+    }
+    const e = 1 - (1 - k) ** 2;
+    r.mesh.position.copy(r.p.group.position);
+    r.mesh.quaternion.copy(camera.quaternion);
+    r.mesh.scale.setScalar(r.p.size * (r.from + (r.to - r.from) * e));
+    r.mesh.material.opacity = r.opacity * (1 - k) ** 1.5;
+  }
+  for (let i = comets.length - 1; i >= 0; i--) {
+    const c = comets[i];
+    const k = Math.max(0, (now - c.born) / c.life);
+    if (k >= 1) {
+      scene.remove(c.pts);
+      c.pts.geometry.dispose();
+      c.pts.material.dispose();
+      comets.splice(i, 1);
+      continue;
+    }
+    const dist = c.push ? 20 + 1100 * k ** 1.7 : 20 + 170 * (1 - (1 - k) ** 2);
+    const head = new THREE.Vector3()
+      .copy(c.start)
+      .addScaledVector(c.dir, dist)
+      .addScaledVector(c.side, Math.sin(k * Math.PI) * (c.push ? 10 : 35));
+    c.hist.unshift(head);
+    if (c.hist.length > COMET_N) c.hist.length = COMET_N;
+    const pos = c.pts.geometry.attributes.position;
+    const col = c.pts.geometry.attributes.color;
+    const fade = c.push ? Math.min(1, (1 - k) * 4) : (1 - k) ** 1.3;
+    for (let j = 0; j < COMET_N; j++) {
+      const h = c.hist[Math.min(j, c.hist.length - 1)];
+      pos.setXYZ(j, h.x, h.y, h.z);
+      const a = fade * (1 - j / COMET_N) ** 1.5;
+      col.setXYZ(j, c.color.r * a, c.color.g * a, c.color.b * a);
+    }
+    pos.needsUpdate = true;
+    col.needsUpdate = true;
+  }
+  for (let i = bursts.length - 1; i >= 0; i--) {
+    const b = bursts[i];
+    const k = Math.max(0, (now - b.born) / b.life);
+    if (k >= 1) {
+      scene.remove(b.pts);
+      b.pts.geometry.dispose();
+      b.pts.material.dispose();
+      bursts.splice(i, 1);
+      continue;
+    }
+    const e = 1 - (1 - k) ** 2;
+    const pos = b.pts.geometry.attributes.position;
+    b.parts.forEach((pt, j) => pos.setXYZ(j, b.center.x + pt.o.x + pt.v.x * e, b.center.y + pt.o.y + pt.v.y * e, b.center.z + pt.o.z + pt.v.z * e));
+    pos.needsUpdate = true;
+    b.pts.material.opacity = (1 - k) ** 1.5;
+  }
+}
+
+// ---------- replay of the day: today's sessions, minute by minute, in about 40 seconds ----------
+const REPLAY_SECONDS = 40;
+const rBtn = document.getElementById('replayBtn');
+const rBar = document.getElementById('replayBar');
+const rPlay = document.getElementById('replayPlay');
+const rRange = document.getElementById('replayRange');
+const rTime = document.getElementById('replayTime');
+const hhmm = (ms) => new Date(ms).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+let lastLive = null; // the newest live snapshot, put back when the replay ends
+
+// A session is on the map from its first to its last active minute (plus a little); busy in the minutes it worked.
+function replaySessions() {
+  const T = replay.T;
+  const m = Math.floor(T / 60000);
+  const live = new Map(D.snap().sessions.map((s) => [s.id, s]));
+  return replay.data.sessions
+    .filter((s) => s.start <= T && T <= s.end + 5 * 60000)
+    .map((s) => {
+      const on = replay.sets.get(s.id);
+      return {
+        id: s.id,
+        name: s.name,
+        cwd: s.cwd || '',
+        status: on.has(m) || on.has(m - 1) ? 'busy' : 'idle',
+        waitingFor: null,
+        control: null,
+        tokens: live.get(s.id)?.tokens || { output: 0 },
+        context: 0,
+        subagents: [],
+        recentTools: [],
+        replay: true,
+      };
+    });
+}
+
+async function startReplay() {
+  let data = null;
+  try {
+    data = await window.agentinan.timeline();
+  } catch {}
+  if (!data || !data.sessions.length) return D.toast('Bugün henüz oynatılacak oturum yok');
+  const from = data.sessions[0].start - 60000;
+  replay = { data, from, to: Math.max(from + 60000, data.now), T: from, playing: true, min: -1, sets: new Map(data.sessions.map((s) => [s.id, new Set(s.minutes)])) };
+  D.select(null);
+  setLinks(null);
+  rBtn.hidden = true;
+  rBar.hidden = false;
+  setPlaying(true);
+  replayFrame(true);
+}
+
+function stopReplay() {
+  if (!replay) return;
+  replay = null;
+  rBar.hidden = true;
+  rBtn.hidden = false;
+  D.select(null);
+  const live = lastLive || D.snap();
+  layout(live.sessions);
+  setLinks(live.links);
+}
+
+function setPlaying(on) {
+  replay.playing = on;
+  rPlay.innerHTML = window.icon(on ? 'pause' : 'play');
+  rPlay.title = on ? 'Duraklat (Boşluk)' : 'Oynat (Boşluk)';
+}
+function togglePlay() {
+  if (!replay) return;
+  if (!replay.playing && replay.T >= replay.to) replay.T = replay.from; // at the end: from the start again
+  setPlaying(!replay.playing);
+}
+
+function replayFrame(force) {
+  rRange.value = String(Math.round(((replay.T - replay.from) / (replay.to - replay.from)) * 1000));
+  rTime.textContent = hhmm(replay.T);
+  const m = Math.floor(replay.T / 60000);
+  if (m === replay.min && !force) return;
+  replay.min = m;
+  layout(replaySessions());
+}
+
+function advanceReplay(dt) {
+  replay.T += (dt * (replay.to - replay.from)) / REPLAY_SECONDS;
+  if (replay.T >= replay.to) {
+    replay.T = replay.to;
+    setPlaying(false);
+  }
+  replayFrame();
+}
+
+rBtn.onclick = startReplay;
+document.getElementById('replayClose').onclick = stopReplay;
+rPlay.onclick = togglePlay;
+rRange.addEventListener('input', () => {
+  if (!replay) return;
+  if (replay.playing) setPlaying(false);
+  replay.T = replay.from + (Number(rRange.value) / 1000) * (replay.to - replay.from);
+  replayFrame();
+});
+
 // ---------- animation ----------
 const clock = new THREE.Clock();
 const tmp = new THREE.Vector3();
@@ -858,10 +1213,13 @@ function animate(now = 0) {
   const dt = Math.min(0.1, clock.getDelta());
   const t = clock.elapsedTime;
 
+  if (replay && replay.playing) advanceReplay(dt);
+
   sunMesh.rotation.y += dt * 0.05;
   const busy = [...planets.values()].some((p) => p.status === 'busy');
-  sunHalo.scale.setScalar((dropHover === 'sun' ? 260 : 190) + Math.sin(t * (busy ? 2.4 : 0.9)) * (busy ? 14 : 5));
-  sunHalo.material.opacity += ((dropHover === 'sun' ? 0.95 : 0.55) - sunHalo.material.opacity) * Math.min(1, dt * 8);
+  sunFlash = Math.max(0, sunFlash - dt * 1.2);
+  sunHalo.scale.setScalar((dropHover === 'sun' ? 260 : 190) + sunFlash * 140 + Math.sin(t * (busy ? 2.4 : 0.9)) * (busy ? 14 : 5));
+  sunHalo.material.opacity += ((dropHover === 'sun' ? 0.95 : 0.55) + sunFlash * 0.45 - sunHalo.material.opacity) * Math.min(1, dt * 8);
   stars.rotation.y += dt * 0.004;
   corona.material.rotation += dt * 0.025;
   corona.material.opacity = (busy ? 0.42 : 0.3) + Math.sin(t * 1.3) * 0.04;
@@ -886,6 +1244,17 @@ function animate(now = 0) {
 
   for (const p of planets.values()) {
     p.group.position.copy(p.phys.anchor).add(p.phys.off);
+    // a new planet is born from the sun: it spirals out to its orbit and grows
+    let grow = 1;
+    if (p.bornAt) {
+      const k = (now - p.bornAt) / 2500;
+      if (k >= 1) p.bornAt = 0;
+      else {
+        const e = 1 - (1 - Math.max(0, k)) ** 3;
+        p.group.position.multiplyScalar(e).applyAxisAngle(UP, (1 - e) * 2.4);
+        grow = Math.max(0.04, e);
+      }
+    }
     if (p.hot) {
       // shake
       const k = p.size * 0.18;
@@ -893,22 +1262,24 @@ function animate(now = 0) {
       p.group.position.y += (Math.random() - 0.5) * k;
       p.group.position.z += (Math.random() - 0.5) * k;
     }
-    p.mesh.scale.setScalar(p.size * (p.hot ? 1.15 + Math.sin(t * 9) * 0.06 : 1));
+    p.mesh.scale.setScalar(p.size * grow * (p.hot ? 1.15 + Math.sin(t * 9) * 0.06 : 1));
     p.mesh.rotation.y += dt * p.spin;
-    if (p.ring) p.ring.scale.setScalar(p.size);
+    if (p.ring) p.ring.scale.setScalar(p.size * grow);
+    const boost = p.doneAt ? Math.max(0, 1 - (now - p.doneAt) / 1600) : 0; // the flare after finishing a job
 
     // overheating flickers between red-hot and yellow-hot; otherwise ease toward the status colour
     const target = p.hot ? HOT.copy(HOT_A).lerp(HOT_B, 0.5 + 0.5 * Math.sin(t * 13)) : STATUS[p.status] || STATUS.idle;
     p.color.lerp(target, Math.min(1, dt * (p.hot ? 12 : 4)));
     p.mesh.material.color.copy(p.color);
     p.mesh.material.emissive.copy(p.color).multiplyScalar(p.hot ? 0.95 : p.status === 'idle' ? 0.12 : 0.32);
+    if (boost) p.mesh.material.emissive.lerp(GOLD, boost * 0.8);
     p.halo.material.color.copy(p.color);
     p.atmo.visible = !low;
     p.atmo.scale.setScalar(p.mesh.scale.x * 1.17);
     p.atmo.material.uniforms.uColor.value.copy(p.color).lerp(WHITE, 0.25);
     p.atmo.material.uniforms.uAlpha.value = p.hot ? 1.4 : p.status === 'idle' ? 0.55 : 1;
-    p.halo.scale.setScalar(p.size * (p.hot ? 8 + Math.sin(t * 7) * 1.4 : p.status === 'idle' ? 3.2 : 4.4 + Math.sin(t * 3) * 0.3));
-    p.halo.material.opacity = p.hot ? 0.9 : p.status === 'idle' ? 0.35 : 0.6;
+    p.halo.scale.setScalar(p.size * grow * (1 + boost * 0.9) * (p.hot ? 8 + Math.sin(t * 7) * 1.4 : p.status === 'idle' ? 3.2 : 4.4 + Math.sin(t * 3) * 0.3));
+    p.halo.material.opacity = Math.min(1, (p.hot ? 0.9 : p.status === 'idle' ? 0.35 : 0.6) + boost * 0.4);
 
     p.label.position.set(0, 0, 0);
 
@@ -935,7 +1306,13 @@ function animate(now = 0) {
     p.sel.material.opacity += ((on ? 0.9 : 0) - p.sel.material.opacity) * Math.min(1, dt * 8);
     p.sel.position.copy(p.group.position);
     p.sel.quaternion.copy(camera.quaternion);
-    p.sel.scale.setScalar(p.size * 1.45);
+    p.sel.scale.setScalar(p.size * grow * 1.45);
+    // context arc: clear on the selected / hovered planet, faint on the others
+    p.ctx.visible = p.ctxPct > 0;
+    p.ctx.position.copy(p.group.position);
+    p.ctx.quaternion.copy(camera.quaternion);
+    p.ctx.scale.setScalar(p.size * grow);
+    p.ctx.material.opacity += ((on ? 0.95 : 0.4) - p.ctx.material.opacity) * Math.min(1, dt * 6);
     shadeOrbit(p);
     p.orbit.material.opacity = p.id === selected ? 0.6 : 0.2;
     p.orbit.material.color.copy(p.id === selected ? ORBIT.selected : ORBIT.line);
@@ -943,7 +1320,7 @@ function animate(now = 0) {
     // comet trail
     const pos = p.trail.geometry.attributes.position;
     const col = p.trail.geometry.attributes.color;
-    const fade = p.status === 'busy' ? 1 : 0;
+    const fade = p.status === 'busy' && !p.bornAt ? 1 : 0;
     for (let k = 0; k < p.trailN; k++) {
       orbitPoint(p, p.angle - (k + 1) * 0.012, tmp);
       pos.setXYZ(k, tmp.x, tmp.y, tmp.z);
@@ -954,14 +1331,56 @@ function animate(now = 0) {
     col.needsUpdate = true;
     p.trail.material.size = p.size * 0.9;
 
-    // moons
-    p.moons.forEach((m, k) => {
-      const mr = 1.9 + k * 0.45;
+    // moons: a new one shoots out to its orbit with a pop; a leaving one dives back into the planet
+    for (let k = p.moons.length - 1; k >= 0; k--) {
+      const m = p.moons[k];
+      let r = 1;
+      let sc = 0.22;
+      if (m.userData.leaving) {
+        const q = (now - m.userData.leaving) / 600;
+        if (q >= 1) {
+          p.group.remove(m);
+          m.material.dispose();
+          p.moons.splice(k, 1);
+          continue;
+        }
+        r = 1 - q * q;
+        sc = 0.22 * (1 - q);
+      } else if (m.userData.born) {
+        const q = Math.max(0, (now - m.userData.born) / 800);
+        if (q >= 1) m.userData.born = 0;
+        r = 1 - (1 - Math.min(1, q)) ** 3;
+        sc = 0.22 * (1 + Math.sin(Math.min(1, q) * Math.PI) * 0.8);
+      }
+      const mr = (1.9 + k * 0.45) * r;
       const a = t * (1.6 - k * 0.15) + m.userData.phase;
       m.position.set(Math.cos(a) * mr, Math.sin(a) * mr * m.userData.tilt, Math.sin(a) * mr);
-      m.scale.setScalar(0.22);
-    });
+      m.scale.setScalar(sc);
+    }
   }
+
+  // closed sessions fall into the sun, shrinking; the sun flares as each one arrives
+  for (let i = dying.length - 1; i >= 0; i--) {
+    const p = dying[i];
+    const k = (now - p.diedAt) / 1800;
+    if (k >= 1) {
+      disposePlanet(p);
+      dying.splice(i, 1);
+      sunFlash = 1;
+      continue;
+    }
+    const e = Math.max(0, k) ** 2;
+    p.group.position.copy(p.fromPos).multiplyScalar(1 - e).applyAxisAngle(UP, e * 2.6);
+    const sc = p.size * (1 - e * 0.92);
+    p.mesh.scale.setScalar(sc);
+    p.mesh.rotation.y += dt * p.spin * 4;
+    p.atmo.scale.setScalar(sc * 1.17);
+    p.halo.scale.setScalar(sc * 3.2);
+    if (p.ring) p.ring.scale.setScalar(sc);
+    p.orbit.material.opacity = 0.2 * (1 - k);
+    p.ctx.material.opacity *= 0.9;
+  }
+  updateFx(now);
 
   updateEmbers(dt);
   updateLinks(t, low);
@@ -1035,6 +1454,8 @@ window.addEventListener('dash:settings', () => {
 });
 
 window.addEventListener('dash:snapshot', (e) => {
+  lastLive = e.detail;
+  if (replay) return; // the replay owns the map until it is closed
   layout(e.detail.sessions);
   setLinks(e.detail.links);
   spawnSparks(e.detail.sessions);
