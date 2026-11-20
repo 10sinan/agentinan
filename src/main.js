@@ -10,6 +10,7 @@ const { Monitor } = require('./monitor');
 const { Limits } = require('./limits');
 const { trayIcon } = require('./trayicon');
 const { guardIpc } = require('./ipc-guard');
+const { isDirectory } = require('./safepath');
 
 app.commandLine.appendSwitch('ozone-platform-hint', 'auto'); // native Wayland when available (Fedora's default session)
 // One data folder (~/.config/agentinan) for both `npm start` and the packaged app, whose name is "Agentinan":
@@ -311,7 +312,7 @@ if (!app.requestSingleInstanceLock()) {
       updateTray(lastSnap, true);
       return settings;
     });
-    ipcMain.handle('open-folder', (_e, dir) => (typeof dir === 'string' && path.isAbsolute(dir) ? shell.openPath(dir) : 'bad path'));
+    ipcMain.handle('open-folder', (_e, dir) => (isDirectory(dir) ? shell.openPath(dir) : 'bad path')); // only a real directory: openPath on a file would run it
     ipcMain.handle('copy', (_e, text) => clipboard.writeText(String(text)));
     ipcMain.handle('refresh', () => poll());
     ipcMain.handle('timeline', () => collector.timeline());
