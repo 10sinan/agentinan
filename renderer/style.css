@@ -566,6 +566,15 @@ textarea:focus {
 .planet-label.faded {
   opacity: 0;
 }
+.planet-label {
+  padding: 4px 9px 5px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg, #000) 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--c, var(--idle)) 28%, transparent);
+  border-top: 2px solid var(--c, var(--idle));
+  backdrop-filter: blur(6px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35), 0 0 12px color-mix(in srgb, var(--c, var(--idle)) 14%, transparent);
+}
 .planet-label b {
   display: block;
   font-size: 12.5px;
