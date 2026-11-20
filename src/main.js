@@ -9,6 +9,7 @@ const { Git } = require('./git');
 const { Monitor } = require('./monitor');
 const { Limits } = require('./limits');
 const { trayIcon } = require('./trayicon');
+const { guardIpc } = require('./ipc-guard');
 
 app.commandLine.appendSwitch('ozone-platform-hint', 'auto'); // native Wayland when available (Fedora's default session)
 // One data folder (~/.config/agentinan) for both `npm start` and the packaged app, whose name is "Agentinan":
@@ -297,6 +298,8 @@ if (!app.requestSingleInstanceLock()) {
     Menu.setApplicationMenu(null);
     loadSettings();
     limits = new Limits(app.getPath('userData'));
+    // every handler registered below (and later) only answers the app's own page
+    guardIpc(ipcMain, path.join(__dirname, '..', 'renderer', 'index.html'), (ch, url) => console.error(`ipc '${ch}' refused from ${url}`));
     ipcMain.handle('settings:get', () => settings);
     ipcMain.handle('settings:set', (_e, patch) => {
       settings = { ...settings, ...patch };
