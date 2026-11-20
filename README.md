@@ -12,6 +12,7 @@ Arayüz beş sekmeden oluşur: **Harita**, **Oturumlar**, **Terminal**, **Git** 
   - Mavi: boşta.
   - Etrafında dönen aylar: çalışan alt ajanlar.
   - Gezegenden uçuşan yazılar: o anda yapılan araç çağrıları.
+  - Bağlantılar: aynı klasörde çalışan oturumlar arasında projenin renginde ince bir ışık hattı olur; çalışan gezegenlere güneşten enerji ışını akar. İki oturum son 15 dakikada aynı dosyaya yazdıysa aralarında kırmızı, yanıp sönen bir hat ve "olası çakışma" etiketi çıkar (aynı dosyanın farklı worktree'lerdeki kopyaları çakışma sayılmaz).
   - Gezegenler birbirini hafifçe iter ve çeker; çalışan gezegen güneşe doğru hafifçe eğilir, güneşe fazla yaklaşan geri savrulur. Bir gezegeni fareyle tutup sürükleyebilirsiniz; bırakınca yaylanarak yörüngesine döner. Bu sadece görseldir, oturumlara dokunmaz. Düşük kalitede gezegenlerin birbirine etkisi kapanır, sürükleme çalışır.
   - Aynı klasördeki oturumlar aynı rengi paylaşır: gezegenin yüzeyi o renge hafifçe boyanır, etikette de küçük bir renk noktası görünür.
   - Aşırı ısınan gezegenin çevresinden kırmızı şok dalgaları yayılır.
