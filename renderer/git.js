@@ -42,39 +42,46 @@
 
   function renderRepos() {
     $('gEmpty').hidden = repos.length > 0;
-    for (const el of document.querySelectorAll('.git-panel > .glist, .git-panel > .gchanges, .git-panel > .gview')) el.hidden = !repos.length;
-    $('gRepos').innerHTML = repos
-      .map(
-        (r) => `<div class="titem${r.root === repo ? ' active' : ''}" data-root="${esc(r.root)}" title="${esc(r.root)}">
-          ${icon('branch')}
-          <div class="tn"><b>${esc(r.name)}</b><span title="${esc(r.branch || '')}">${esc(r.branch || '—')}</span></div>
-          ${r.changes ? `<em class="gcount">${r.changes}</em>` : ''}
-        </div>`,
-      )
-      .join('');
+    for (const el of document.querySelectorAll('.git-panel > .gchanges, .git-panel > .gview')) el.hidden = !repos.length;
+    if (status) renderHead();
   }
 
-  $('gRepos').addEventListener('click', (e) => {
-    const it = e.target.closest('.titem');
-    if (!it || it.dataset.root === repo) return;
-    repo = it.dataset.root;
+  // the repository picker lives in the header; a redraw would close it while it is open
+  const pickerOpen = () => document.activeElement && document.activeElement.id === 'gRepo';
+
+  function repoPicker() {
+    const opts = repos
+      .map((r) => {
+        const label = `${r.name} · ${r.branch || '—'}${r.changes ? ` (${r.changes})` : ''}`;
+        return `<option value="${esc(r.root)}"${r.root === repo ? ' selected' : ''} title="${esc(r.root)}">${esc(label)}</option>`;
+      })
+      .join('');
+    return `<select id="gRepo" class="model-pick" title="Depo seç">${opts}<option value="" disabled>──────</option><option value="+add">＋ Depo ekle…</option></select>`;
+  }
+
+  const selectRepo = (root) => {
+    repo = root;
     sel = null;
     commit = null;
     lastBody = '';
-    renderRepos();
     refresh(true);
-  });
+  };
 
   const addRepo = async () => {
     const root = await call(G.addRepo());
-    if (!root) return;
+    if (!root) return renderHead();
     await loadRepos();
-    repo = root;
-    renderRepos();
-    refresh(true);
+    selectRepo(root);
   };
-  $('gAddRepo').onclick = addRepo;
   $('gEmptyAdd').onclick = addRepo;
+
+  $('gHead').addEventListener('change', (e) => {
+    if (e.target.id !== 'gRepo') return;
+    const v = e.target.value;
+    e.target.blur();
+    if (v === '+add') return addRepo();
+    if (v && v !== repo) selectRepo(v);
+  });
 
   // ---------- status and file lists ----------
   async function refresh(full) {
@@ -90,85 +97,76 @@
 
   function renderHead() {
     const s = status;
+    if (!s) return;
+    const counts = s.ahead || s.behind ? `<span class="gsync">${s.ahead ? `${icon('up')}${s.ahead}` : ''}${s.behind ? `${icon('down')}${s.behind}` : ''}</span>` : '';
     const sync = s.upstream
-      ? `<span class="pill" title="${esc(s.upstream)}">${icon('up')}${s.ahead} ${icon('down')}${s.behind}</span>`
+      ? `<button class="btn sm" data-g="sync" title="${esc(s.upstream)} ile eşitle: önce çeker (sadece ileri sarma), sonra gönderir"${busy ? ' disabled' : ''}>${icon('refresh')}Eşitle${counts}</button>`
       : `<span class="pill" title="Bu dalın uzak karşılığı yok">uzak dal yok</span>`;
-    $('gHead').innerHTML = `
-      <span class="pill ctl" title="${esc(s.branch || '(ayrık HEAD)')}">${icon('branch')}${esc(s.branch || '(ayrık HEAD)')}</span>${sync}
-      <span class="spacer"></span>
-      <button class="btn sm ghost" data-g="fetch" title="Uzak depodaki yenilikleri al (fetch)">${icon('refresh')}</button>
-      <button class="btn sm" data-g="pull" title="Uzak değişiklikleri çek (pull, sadece ileri sarma)">${icon('down')}Pull</button>
-      <button class="btn sm" data-g="push" title="Commit'leri uzak depoya gönder (push)">${icon('up')}Push${s.ahead ? ` <b>${s.ahead}</b>` : ''}</button>`;
-    const staged = s.staged.length;
-    const all = staged + s.unstaged.length + s.untracked.length;
+    if (!pickerOpen()) $('gHead').innerHTML = `${repoPicker()}<span class="spacer"></span>${sync}`;
+    const n = changedFiles().length;
     const btn = $('gCommit');
-    btn.disabled = busy || !all;
-    btn.querySelector('span').textContent = staged ? `Commit (${staged})` : all ? 'Tümünü ekle ve commit' : 'Commit';
+    btn.disabled = busy || !n;
+    btn.querySelector('span').textContent = n ? `Commit (${n})` : 'Commit';
+  }
+
+  // staged, unstaged and untracked files as one list (a file changed on both sides appears once); conflicts stay apart
+  function changedFiles() {
+    const s = status;
+    const seen = new Map();
+    for (const f of s.unstaged) seen.set(f.path, { ...f, kind: 'head' });
+    for (const f of s.staged) if (!seen.has(f.path)) seen.set(f.path, { ...f, kind: 'head' });
+    for (const f of s.untracked) if (!seen.has(f.path)) seen.set(f.path, { ...f, kind: 'untracked' });
+    return [...seen.values()].sort((a, b) => a.path.localeCompare(b.path));
   }
 
   function fileRow(f, kind) {
-    const slash = f.path.lastIndexOf('/');
-    const name = f.path.slice(slash + 1);
-    const dir = slash >= 0 ? f.path.slice(0, slash) : '';
+    // an untracked folder comes as "dir/": keep its slash on the name
+    const p = f.path.endsWith('/') ? f.path.slice(0, -1) : f.path;
+    const slash = p.lastIndexOf('/');
+    const name = p.slice(slash + 1) + (p === f.path ? '' : '/');
+    const dir = slash >= 0 ? p.slice(0, slash) : '';
     const active = sel && sel.path === f.path && sel.kind === kind && mode === 'diff' ? ' active' : '';
-    const action =
-      kind === 'staged'
-        ? `<button class="fa" data-a="unstage" title="Hazırlıktan çıkar">${icon('minus')}</button>`
-        : kind === 'conflict'
-          ? ''
-          : `<button class="fa" data-a="stage" title="Commit'e hazırla">${icon('plus')}</button>`;
     return `<div class="frow${active}" data-path="${esc(f.path)}" data-kind="${kind}" title="${esc((f.from ? f.from + ' → ' : '') + f.path)}">
-      <span class="fname">${esc(name)}</span><span class="fdir">${esc(dir)}</span>${action}
-      <span class="fcode c-${f.code}" title="${CODE[f.code] || f.code}">${kind === 'untracked' ? 'U' : esc(f.code)}</span>
+      <span class="fname">${esc(name)}</span><span class="fdir">${esc(dir)}</span>
+      <span class="fcode c-${f.code}" title="${CODE[f.code] || f.code}">${esc(f.code)}</span>
     </div>`;
   }
 
-  function section(title, list, kind, bulk) {
+  function section(title, list) {
     if (!list.length) return '';
-    return `<div class="fsec"><div class="fsec-head"><span>${title}</span><em>${list.length}</em><span class="spacer"></span>${bulk || ''}</div>${list.map((f) => fileRow(f, kind)).join('')}</div>`;
+    return `<div class="fsec"><div class="fsec-head"><span>${title}</span><em>${list.length}</em></div>${list.map((f) => fileRow(f, f.kind)).join('')}</div>`;
   }
 
   function renderFiles() {
-    const s = status;
-    const html =
-      section('Çakışmalar', s.conflicts, 'conflict') +
-      section('Commit\'e hazır', s.staged, 'staged', `<button class="fa" data-a="unstage-all" title="Hepsini çıkar">${icon('minus')}</button>`) +
-      section('Değişiklikler', s.unstaged, 'unstaged', `<button class="fa" data-a="stage-unstaged" title="Bu bölümün hepsini hazırla">${icon('plus')}</button>`) +
-      section('Yeni dosyalar', s.untracked, 'untracked', `<button class="fa" data-a="stage-untracked" title="Bu bölümün hepsini hazırla">${icon('plus')}</button>`);
+    const html = section('Çakışmalar', status.conflicts.map((f) => ({ ...f, kind: 'conflict' }))) + section('Değişiklikler', changedFiles());
     $('gFiles').innerHTML = html || `<div class="gclean">${icon('check')}<span>Çalışma alanı temiz</span></div>`;
   }
 
-  $('gFiles').addEventListener('click', async (e) => {
-    const a = e.target.closest('.fa')?.dataset.a;
+  $('gFiles').addEventListener('click', (e) => {
     const row = e.target.closest('.frow');
-    if (a === 'stage-unstaged') await call(G.stage(repo, status.unstaged.map((f) => f.path)));
-    else if (a === 'stage-untracked') await call(G.stage(repo, status.untracked.map((f) => f.path)));
-    else if (a === 'unstage-all') await call(G.unstage(repo, 'all'));
-    else if (a && row) await call(a === 'stage' ? G.stage(repo, [row.dataset.path]) : G.unstage(repo, [row.dataset.path]));
-    else if (row) {
-      sel = { path: row.dataset.path, kind: row.dataset.kind };
-      setMode('diff');
-      return;
-    }
-    if (a) {
-      // a staged file moves lists: keep showing it from its new side
-      if (sel && row && sel.path === row.dataset.path) sel.kind = a === 'stage' ? 'staged' : 'unstaged';
-      refresh();
-      loadRepos();
-    }
+    if (!row) return;
+    sel = { path: row.dataset.path, kind: row.dataset.kind };
+    setMode('diff');
   });
 
-  $('gHead').addEventListener('click', async (e) => {
-    const g = e.target.closest('button')?.dataset.g;
-    if (!g || busy) return;
+  // Eşitle: fetch, then pull (fast-forward only) if behind, then push if ahead; stops at the first error
+  async function sync() {
     busy = true;
-    const btn = e.target.closest('button');
-    btn.disabled = true;
-    D.toast(g === 'push' ? 'Gönderiliyor…' : g === 'pull' ? 'Çekiliyor…' : 'Güncelleniyor…');
-    const ok = await call(G[g](repo));
+    renderHead();
+    D.toast('Eşitleniyor…');
+    let ok = (await call(G.fetch(repo))) !== null;
+    let st = ok && (await call(G.status(repo)));
+    if (st && st.behind) ok = (await call(G.pull(repo))) !== null;
+    if (ok) st = await call(G.status(repo));
+    if (ok && st && st.ahead) ok = (await call(G.push(repo))) !== null;
     busy = false;
-    if (ok !== null) D.toast(g === 'push' ? 'Push tamamlandı' : g === 'pull' ? 'Pull tamamlandı' : 'Güncellendi');
-    refresh(true);
+    if (ok) D.toast('Eşitlendi');
+    await refresh(true);
+    loadRepos();
+  }
+
+  $('gHead').addEventListener('click', (e) => {
+    if (e.target.closest('button')?.dataset.g === 'sync' && !busy) sync();
   });
 
   // ---------- commit ----------
@@ -182,8 +180,9 @@
     }
     busy = true;
     $('gCommit').disabled = true;
-    if (!status.staged.length) await call(G.stage(repo, 'all'));
-    const ok = await call(G.commit(repo, msg));
+    // the commit always takes every change; staging stays out of sight
+    const staged = (await call(G.stage(repo, 'all'))) !== null;
+    const ok = staged ? await call(G.commit(repo, msg)) : null;
     busy = false;
     if (ok !== null) {
       $('gMsg').value = '';
@@ -229,19 +228,14 @@
   async function loadDiff() {
     if (!status) return;
     // nothing chosen: show the first changed file
-    const all = [
-      ...status.conflicts.map((f) => ({ path: f.path, kind: 'conflict' })),
-      ...status.staged.map((f) => ({ path: f.path, kind: 'staged' })),
-      ...status.unstaged.map((f) => ({ path: f.path, kind: 'unstaged' })),
-      ...status.untracked.map((f) => ({ path: f.path, kind: 'untracked' })),
-    ];
+    const all = [...status.conflicts.map((f) => ({ path: f.path, kind: 'conflict' })), ...changedFiles().map((f) => ({ path: f.path, kind: f.kind }))];
     if (sel && !all.some((f) => f.path === sel.path && f.kind === sel.kind)) sel = all.find((f) => f.path === sel.path) || null;
     if (!sel) sel = all[0] || null;
     if (!sel) return setBody(`<div class="gnote">Gösterilecek değişiklik yok.</div>`, '');
     renderFiles();
     const text = await call(G.diff(repo, sel.path, sel.kind), true);
     if (mode !== 'diff') return;
-    const label = { staged: 'commit\'e hazır', unstaged: 'değişiklik', untracked: 'yeni dosya', conflict: 'çakışma' }[sel.kind] || '';
+    const label = { head: 'değişiklik', untracked: 'yeni dosya', conflict: 'çakışma' }[sel.kind] || '';
     if (sel.kind === 'conflict')
       return setBody(`<pre class="chead">${esc(text || 'Çakışma işaretleri dosyanın içinde (<<<<<<< / >>>>>>>).')}</pre>`, `${icon('file')}<b>${esc(sel.path)}</b><span>${label}</span>`);
     setBody(text ? renderDiff(text) : `<div class="gnote">Bu dosyada gösterilecek metin farkı yok (ikili dosya ya da sadece izin değişikliği olabilir).</div>`, `${icon('file')}<b>${esc(sel.path)}</b><span>${label}</span>`);

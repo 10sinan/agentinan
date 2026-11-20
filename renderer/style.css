@@ -1525,48 +1525,6 @@ body.low:not([data-tab='map']) #scene {
 .git-panel > [hidden] {
   display: none !important;
 }
-.glist {
-  width: 210px;
-  flex-shrink: 0;
-  border-right: 1px solid var(--edge);
-  padding: 12px 10px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.glist h4 {
-  margin: 4px 8px 8px;
-  font-size: 10.5px;
-  font-weight: 600;
-  color: var(--text-3);
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-}
-.glist .titem .ico {
-  color: var(--text-3);
-}
-.glist .titem.active .ico {
-  color: var(--accent);
-}
-.gcount {
-  font-style: normal;
-  font-size: 10.5px;
-  font-weight: 700;
-  min-width: 20px;
-  height: 18px;
-  padding: 0 6px;
-  border-radius: 9px;
-  background: var(--accent-soft);
-  color: var(--accent-2);
-  display: grid;
-  place-items: center;
-}
-.glist > .btn {
-  margin-top: 8px;
-  justify-content: center;
-}
-
 .gchanges {
   width: 370px;
   flex-shrink: 0;
@@ -1591,8 +1549,24 @@ body.low:not([data-tab='map']) #scene {
   white-space: nowrap;
   flex-shrink: 0;
 }
-.g-head .pill.ctl {
+.g-head select {
+  min-width: 0;
   flex-shrink: 1;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  padding: 4px 6px;
+}
+.gsync {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 4px;
+  font-weight: 700;
+  color: var(--accent-2);
+}
+.gsync .ico {
+  width: 11px;
+  height: 11px;
 }
 .g-head .btn {
   flex-shrink: 0;
@@ -1695,32 +1669,6 @@ body.low:not([data-tab='map']) #scene {
 .fcode.c-R,
 .fcode.c-C {
   color: var(--idle);
-}
-.fa {
-  width: 22px;
-  height: 22px;
-  border: 0;
-  border-radius: 5px;
-  background: transparent;
-  color: var(--text-2);
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  opacity: 0;
-  padding: 0;
-}
-.fa .ico {
-  width: 14px;
-  height: 14px;
-}
-.frow:hover .fa,
-.fsec-head:hover .fa,
-.frow.active .fa {
-  opacity: 1;
-}
-.fa:hover {
-  background: var(--glass-hover);
-  color: var(--text);
 }
 .gclean {
   display: flex;
