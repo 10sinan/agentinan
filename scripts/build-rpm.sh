@@ -57,3 +57,12 @@ SPEC
 rpmbuild --quiet --define "_topdir $TOP" --define "_build_id_links none" --define "__strip /bin/true" -bb "$TOP/SPECS/agentinan.spec"
 cp "$TOP"/RPMS/x86_64/agentinan-"$VERSION"-1.x86_64.rpm dist/
 echo "dist/agentinan-$VERSION-1.x86_64.rpm"
+
+# SHA256SUMS next to the artifacts (the rpm, and the AppImage when `npm run dist` built one), paths relative to dist/
+(
+  cd dist
+  set -- agentinan-"$VERSION"-1.x86_64.rpm
+  for f in Agentinan-"$VERSION"-*.AppImage; do [ -f "$f" ] && set -- "$@" "$f"; done
+  sha256sum "$@" > SHA256SUMS
+)
+echo "dist/SHA256SUMS"
