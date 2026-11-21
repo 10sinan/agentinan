@@ -415,7 +415,17 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.handle('git:commit', wrap((r, msg) => gitApi.commit(r, msg)));
     ipcMain.handle('git:log', wrap((r) => gitApi.log(r)));
     ipcMain.handle('git:show', wrap((r, hash) => gitApi.show(r, hash)));
-    ipcMain.handle('git:push', wrap((r) => gitApi.push(r)));
+    // The map's branch galaxy: asked for by session id, so the page can't name an arbitrary folder.
+    ipcMain.handle(
+      'git:branches',
+      wrap(async (id) => {
+        const s = liveSession(String(id));
+        const [repo] = await gitApi.repos([s.cwd]);
+        if (!repo) throw new Error('Bu oturumun klasörü bir git deposu değil');
+        return gitApi.branches(repo.root);
+      }),
+    );
+    ipcMain.handle('git:push',wrap((r) => gitApi.push(r)));
     ipcMain.handle('git:pull', wrap((r) => gitApi.pull(r)));
     ipcMain.handle('git:fetch', wrap((r) => gitApi.fetch(r)));
     ipcMain.handle(

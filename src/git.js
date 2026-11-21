@@ -67,7 +67,65 @@ const safeHash = (h) => {
   return h;
 };
 
-const clipDiff = (s) => (s.length > MAX_DIFF ? s.slice(0, MAX_DIFF) + '\n… (fark çok büyük, kısaltıldı)\n' : s);
+// ---------- branches (for-each-ref) ----------
+// One line per ref, fields separated by \x1f. The subject goes last: it is free text.
+const REF_FORMAT = ['%(refname)', '%(refname:short)', '%(objectname)', '%(committerdate:unix)', '%(HEAD)', '%(subject)'].join('%1f');
+
+// for-each-ref output → [{ ref, name, remote, hash, time, current, subject }]. "origin/HEAD" (a pointer, not a
+// branch) and lines that don't look like a ref are skipped.
+function parseRefs(out) {
+  const list = [];
+  for (const line of String(out || '').split('\n')) {
+    const f = line.split('\x1f');
+    if (f.length < 6) continue;
+    const [ref, name, hash, time, head] = f;
+    const subject = f.slice(5).join('\x1f');
+    if (!/^[0-9a-f]{7,64}$/.test(hash)) continue;
+    let remote = null;
+    if (ref.startsWith('refs/remotes/')) {
+      const rest = ref.slice('refs/remotes/'.length);
+      if (rest.endsWith('/HEAD') || !rest.includes('/')) continue;
+      remote = rest.slice(0, rest.indexOf('/'));
+    } else if (!ref.startsWith('refs/heads/')) continue;
+    list.push({ ref, name, remote, hash, time: (Number(time) || 0) * 1000, current: head === '*', subject });
+  }
+  return list;
+}
+
+// The branch the others are measured against: what origin/HEAD points at, else main, else master, else HEAD's.
+async function mainRef(r, refs) {
+  const has = (ref) => refs.find((x) => x.ref === ref);
+  let target = '';
+  try {
+    target = (await git(r, ['symbolic-ref', '-q', 'refs/remotes/origin/HEAD'], { okCodes: [0, 1, 128], timeout: 5000 })).trim();
+  } catch {}
+  const short = (ref) => ref.replace(/^refs\/(heads|remotes\/[^/]+)\//, '');
+  if (target && has(target)) {
+    const name = short(target);
+    return { ref: has(`refs/heads/${name}`) ? `refs/heads/${name}` : target, short: name };
+  }
+  for (const n of ['main', 'master']) {
+    if (has(`refs/heads/${n}`)) return { ref: `refs/heads/${n}`, short: n };
+    if (has(`refs/remotes/origin/${n}`)) return { ref: `refs/remotes/origin/${n}`, short: n };
+  }
+  const cur = refs.find((x) => x.current);
+  return cur ? { ref: cur.ref, short: cur.name } : null;
+}
+
+// Commits `ref` has that `base` lacks (ahead) and the other way round (behind). Full ref names only, so a branch
+// called "-x" can't be read as an option.
+async function aheadBehind(r, base, ref) {
+  if (base === ref) return { ahead: 0, behind: 0 };
+  try {
+    const out = await git(r, ['rev-list', '--left-right', '--count', `${base}...${ref}`, '--'], { timeout: 5000 });
+    const [behind, ahead] = out.trim().split(/\s+/).map(Number);
+    return { ahead: ahead || 0, behind: behind || 0 };
+  } catch {
+    return { ahead: 0, behind: 0 };
+  }
+}
+
+const clipDiff =(s) => (s.length > MAX_DIFF ? s.slice(0, MAX_DIFF) + '\n… (fark çok büyük, kısaltıldı)\n' : s);
 
 class Git {
   constructor() {
@@ -158,6 +216,55 @@ class Git {
     return clipDiff(await git(this.repo(r), ['show', '--no-color', '--stat', '--patch', '--format=commit %H%nYazar: %an <%ae>%nTarih: %ad%n%n%B', safeHash(hash)]));
   }
 
+  // The repository's branches for the map's "branch galaxy": local ones and origin/* (as of the last fetch; no
+  // network here), each with how far it is from main. A local branch and its origin/ twin are one entry.
+  async branches(r, max = 40) {
+    r = this.repo(r);
+    const refs = parseRefs(
+      await git(r, ['for-each-ref', '--sort=-committerdate', `--format=${REF_FORMAT}`, 'refs/heads', 'refs/remotes'], { timeout: 8000 }),
+    );
+    const main = await mainRef(r, refs);
+    const head = refs.find((x) => x.current);
+    const byName = new Map();
+    for (const ref of refs) {
+      const key = ref.remote ? ref.name.slice(ref.remote.length + 1) : ref.name;
+      let b = byName.get(key);
+      if (!b) {
+        if (byName.size >= max) continue; // newest first, so the oldest branches are the ones left out
+        byName.set(key, (b = { name: key, local: null, remote: null, current: false }));
+      }
+      if (ref.remote) {
+        if (!b.remote || ref.remote === 'origin') b.remote = ref; // origin wins over other remotes
+      } else b.local = ref;
+      if (ref.current) b.current = true;
+    }
+    const branches = [];
+    for (const b of byName.values()) {
+      const tip = b.local || b.remote;
+      const vs = main ? await aheadBehind(r, main.ref, tip.ref) : { ahead: 0, behind: 0 };
+      let sync = b.local ? 'local-only' : 'remote-only';
+      if (b.local && b.remote) {
+        const ab = b.local.hash === b.remote.hash ? { ahead: 0, behind: 0 } : await aheadBehind(r, b.remote.ref, b.local.ref);
+        sync = ab.ahead && ab.behind ? 'diverged' : ab.ahead ? 'ahead' : ab.behind ? 'behind' : 'same';
+      }
+      branches.push({
+        name: b.name,
+        isMain: !!main && (tip.ref === main.ref || b.name === main.short),
+        current: b.current,
+        hasLocal: !!b.local,
+        hasRemote: !!b.remote,
+        remote: b.remote ? b.remote.name : null,
+        hash: tip.hash,
+        time: Math.max(b.local?.time || 0, b.remote?.time || 0),
+        subject: tip.subject,
+        ahead: vs.ahead,
+        behind: vs.behind,
+        sync,
+      });
+    }
+    return { root: r, name: path.basename(r), main: main ? main.short : null, head: head ? head.name : null, branches };
+  }
+
   async push(r) {
     return git(this.repo(r), ['push'], { timeout: 120_000 });
   }
@@ -171,4 +278,4 @@ class Git {
   }
 }
 
-module.exports = { Git, parseStatus };
+module.exports = { Git, parseStatus, parseRefs };
