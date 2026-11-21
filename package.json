@@ -41,7 +41,17 @@
       "src/**",
       "renderer/**",
       "package.json",
-      "!**/*.test.js"
+      "!**/*.test.js",
+      {
+        "from": "node_modules/three/examples/jsm",
+        "to": "node_modules/three/examples/jsm",
+        "filter": [
+          "controls/**",
+          "postprocessing/**",
+          "renderers/**",
+          "shaders/**"
+        ]
+      }
     ],
     "asarUnpack": [
       "node_modules/@lydell/**"
