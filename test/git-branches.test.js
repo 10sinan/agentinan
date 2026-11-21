@@ -102,6 +102,42 @@ test('a branch already merged on origin is not ahead, even while the local main 
   assert.deepStrictEqual([by.merged.ahead, by.merged.behind], [0, 0]);
 });
 
+test('branchCommits: the commits a branch has that origin/main lacks, newest first', async () => {
+  const g = new Git();
+  await g.repos([work], true);
+  const f = await g.branchCommits(work, 'feature');
+  assert.strictEqual(f.base, 'main');
+  assert.strictEqual(f.total, 3);
+  assert.deepStrictEqual(
+    f.commits.map((c) => c.subject),
+    ['feat 3 unpushed', 'feat 2', 'feat 1'],
+  );
+  assert.ok(f.commits.every((c) => /^[0-9a-f]{40}$/.test(c.hash) && c.author === 't' && c.time > 0));
+
+  const two = await g.branchCommits(work, 'feature', 2);
+  assert.strictEqual(two.total, 3); // the count is the whole branch, the list is capped
+  assert.strictEqual(two.commits.length, 2);
+
+  // a branch only on origin, one merged already, main itself, an option-like name
+  assert.deepStrictEqual(
+    (await g.branchCommits(work, 'remote-only')).commits.map((c) => c.subject),
+    ['only on the server'],
+  );
+  assert.strictEqual((await g.branchCommits(work, 'merged')).total, 0);
+  assert.strictEqual((await g.branchCommits(work, 'main')).total, 0);
+  assert.strictEqual((await g.branchCommits(work, '-dash')).total, 0);
+});
+
+test('branchCommits only takes a branch name, never revision syntax or options', async () => {
+  const g = new Git();
+  await assert.rejects(() => g.branchCommits(work, 'feature'), /Bilinmeyen depo/);
+  await g.repos([work], true);
+  for (const bad of ['main..feature', 'feature~1', 'HEAD', '--all', '-n1', 'origin/feature', 'refs/heads/feature', 'nope']) {
+    await assert.rejects(() => g.branchCommits(work, bad), /Branch bulunamadı/, bad);
+  }
+  for (const bad of ['', null, 42, 'x'.repeat(256)]) await assert.rejects(() => g.branchCommits(work, bad), /Geçersiz branch/);
+});
+
 test('branches: only a known repository, and the count is capped (newest kept)', async () => {
   const g = new Git();
   await assert.rejects(() => g.branches(work), /Bilinmeyen depo/);

@@ -847,9 +847,13 @@ window.addEventListener('blur', endDrag);
 labels.domElement.addEventListener('pointerup', (e) => {
   if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5) return; // a drag, not a click
   if (galaxy) {
-    const b = gPick(e);
-    galaxy.selected = b && b !== galaxy.selected ? b : null;
-    return renderGalaxyBar();
+    const u = gPick(e);
+    if (u && u.commit) {
+      window.agentinan.copy(u.commit.hash);
+      return D.toast(`Commit ${u.commit.short} kopyalandı`);
+    }
+    const b = u && u.branch;
+    return selectBranch(b && b !== galaxy.selected ? b : null);
   }
   const id = pick(e);
   D.select(id && id !== D.selected() ? id : null, true);
@@ -877,8 +881,12 @@ document.addEventListener('keydown', (e) => {
   if (document.querySelector('.modal:not([hidden])')) return;
   const sel = D.selected();
   if (galaxy) {
-    // the galaxy has its own keys: back to the map, nothing else (Tab/Enter/Space act on planets)
-    if (e.key === 'Escape' || e.key === 'g' || e.key === 'G') {
+    // the galaxy has its own keys (Tab/Enter/Space act on planets): Esc lets go of the branch first, like on the map,
+    // then goes back; G always goes back
+    if (e.key === 'Escape' && galaxy.selected) {
+      e.preventDefault();
+      selectBranch(null);
+    } else if (e.key === 'Escape' || e.key === 'g' || e.key === 'G') {
       e.preventDefault();
       closeGalaxy();
     }
@@ -1249,7 +1257,7 @@ const gxInfo = document.getElementById('galaxyInfo');
 const gxFetch = document.getElementById('galaxyFetch');
 const mapHint = document.querySelector('.view[data-view="map"] .hint') || document.querySelector('.hint');
 const HINT_MAP = mapHint ? mapHint.textContent : '';
-const HINT_GALAXY = 'Sürükle: döndür · Tekerlek: yakınlaş · Tıkla: branch seç · Esc / G: haritaya dön';
+const HINT_GALAXY = "Tıkla: branch seç (commit'leri ay olur) · Aya tıkla: commit kimliğini kopyala · Esc: geri · G: haritaya dön";
 const SYNC_TEXT = {
   same: 'origin ile aynı',
   ahead: '↑ push edilmemiş commit var',
@@ -1318,6 +1326,58 @@ function disposeBranchBody(g) {
   if (i >= 0) gPickables.splice(i, 1);
 }
 
+// ---- commit moons: the selected branch's commits that main lacks, the newest on the innermost moon orbit ----
+const MOON_MAX = 12;
+function clearMoons() {
+  const m = galaxy && galaxy.moons;
+  if (!m) return;
+  for (const mesh of m.meshes) {
+    mesh.parent?.remove(mesh);
+    mesh.material.dispose(); // MOON_GEO is shared with the solar system's moons: kept
+    const i = gPickables.indexOf(mesh);
+    if (i >= 0) gPickables.splice(i, 1);
+  }
+  galaxy.moons = null;
+  galaxy.hoverCommit = null;
+}
+
+async function loadMoons(name) {
+  const req = ++galaxy.moonReq;
+  const id = galaxy.id;
+  const r = await window.agentinan.git.branchCommits(id, name).catch((e) => ({ error: String(e) }));
+  if (!galaxy || galaxy.id !== id || galaxy.moonReq !== req || galaxy.selected !== name) return; // superseded
+  clearMoons();
+  const g = galaxy.bodies.get(name);
+  if (!g) return;
+  if (!r || !r.data) {
+    galaxy.moons = { name, error: true, total: 0, meshes: [] };
+    return renderGalaxyBar();
+  }
+  const meshes = r.data.commits.slice(0, MOON_MAX).map((c, k) => {
+    const mesh = new THREE.Mesh(
+      MOON_GEO,
+      new THREE.MeshStandardMaterial({ color: g.color.clone().lerp(WHITE, 0.55), emissive: g.color.clone().multiplyScalar(0.25), roughness: 0.9 }),
+    );
+    mesh.userData = { commit: c, k, phase: k * 2.39996, tilt: ((hash(c.hash) % 100) / 100) * 0.8 - 0.4 }; // golden angle apart
+    mesh.scale.setScalar(0.01);
+    g.group.add(mesh);
+    gPickables.push(mesh);
+    return mesh;
+  });
+  galaxy.moons = { name, total: r.data.total, meshes, born: performance.now() };
+  renderGalaxyBar();
+}
+
+// Selecting a branch brings out its commits as moons; selecting nothing (or another branch) takes them away.
+function selectBranch(name) {
+  if (!galaxy || galaxy.selected === name) return;
+  galaxy.selected = name;
+  galaxy.moonReq++; // a load still under way for the previous branch is dropped
+  clearMoons();
+  renderGalaxyBar();
+  if (name) loadMoons(name);
+}
+
 // New data: rebuilt only when something changed; a branch that stays keeps its place on its orbit.
 function setGalaxyData(data) {
   const sig = JSON.stringify(data);
@@ -1326,11 +1386,13 @@ function setGalaxyData(data) {
   galaxy.sig = sig;
   galaxy.data = data;
   const angles = new Map([...galaxy.bodies].map(([n, g]) => [n, g.angle]));
+  clearMoons();
   for (const g of galaxy.bodies.values()) disposeBranchBody(g);
   galaxy.bodies.clear();
   const { star, bodies } = branchLayout(data);
   for (const L of bodies) galaxy.bodies.set(L.b.name, makeBranchBody(L, angles.get(L.b.name)));
   if (galaxy.selected && !galaxy.bodies.has(galaxy.selected)) galaxy.selected = null;
+  if (galaxy.selected) loadMoons(galaxy.selected); // the branch changed (new commits, a fetch): its moons too
   gStarEl.innerHTML = `<b>${D.esc(data.name || '')}</b> · ${star ? D.esc(star.name) : 'ana dal yok'}`;
   renderGalaxyBar();
 }
@@ -1341,7 +1403,15 @@ function renderGalaxyBar() {
   gxTitle.innerHTML = `${window.icon('branch')}<b>${D.esc(d.name || '')}</b>`;
   const b = galaxy.selected && galaxy.bodies.get(galaxy.selected)?.L.b;
   if (b) {
-    gxInfo.innerHTML = `<b>${D.esc(b.name)}</b> · +${b.ahead | 0} −${b.behind | 0} · ${D.esc(SYNC_TEXT[b.sync] || '')} · <span class="m">${D.esc(b.subject || '')}</span>`;
+    const m = galaxy.moons && galaxy.moons.name === b.name ? galaxy.moons : null;
+    const moons = !m
+      ? "commit'ler okunuyor…"
+      : m.error
+        ? "commit'ler okunamadı"
+        : m.total
+          ? `${m.total} commit ana dalda yok${m.total > m.meshes.length ? ` · en yeni ${m.meshes.length} tanesi ay` : ''}`
+          : 'ana dalda olmayan commit yok';
+    gxInfo.innerHTML = `<b>${D.esc(b.name)}</b> · +${b.ahead | 0} −${b.behind | 0} · ${D.esc(SYNC_TEXT[b.sync] || '')} · ${D.esc(moons)}`;
   } else {
     const n = d.branches.length;
     const local = d.branches.filter((x) => x.hasLocal).length;
@@ -1378,7 +1448,20 @@ async function openGalaxy(id) {
   if (!r || r.error) return D.toast(r?.error || "Branch'ler okunamadı");
   if (replay) stopReplay();
   if (galaxy) closeGalaxy(true);
-  galaxy = { id, data: null, bodies: new Map(), selected: null, hover: null, bornAt: performance.now(), sig: '', stale: false, timer: setInterval(loadGalaxy, 10_000) };
+  galaxy = {
+    id,
+    data: null,
+    bodies: new Map(),
+    selected: null,
+    hover: null,
+    moons: null, // { name, total, meshes, born } for the selected branch
+    moonReq: 0,
+    hoverCommit: null,
+    bornAt: performance.now(),
+    sig: '',
+    stale: false,
+    timer: setInterval(loadGalaxy, 10_000),
+  };
   setGalaxyData(r.data);
   if (drag) drag = null;
   hoverId = null;
@@ -1392,6 +1475,7 @@ async function openGalaxy(id) {
 function closeGalaxy(quiet) {
   if (!galaxy) return;
   clearInterval(galaxy.timer);
+  clearMoons();
   for (const g of galaxy.bodies.values()) disposeBranchBody(g);
   galaxy = null;
   gRing.material.opacity = 0;
@@ -1409,24 +1493,37 @@ function gPick(e) {
   mouse.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
   ray.setFromCamera(mouse, camera);
   const hit = ray.intersectObjects(gPickables, false)[0];
-  return hit ? hit.object.userData.branch : null;
+  return hit ? hit.object.userData : null; // { branch } for a branch, { commit, … } for a moon
 }
 
 function galaxyHover(e) {
-  galaxy.hover = gPick(e);
-  labels.domElement.style.cursor = galaxy.hover ? 'pointer' : 'grab';
+  const u = gPick(e);
+  galaxy.hover = (u && u.branch) || null;
+  galaxy.hoverCommit = u && u.commit ? u.commit.hash : null;
+  labels.domElement.style.cursor = u ? 'pointer' : 'grab';
+  const r = (tip.offsetParent || tip.parentElement).getBoundingClientRect();
+  const place = () => {
+    tip.hidden = false;
+    tip.style.left = Math.min(e.clientX - r.left + 14, r.width - 330) + 'px';
+    tip.style.top = e.clientY - r.top + 14 + 'px';
+  };
+  if (u && u.commit) {
+    const c = u.commit;
+    tip.innerHTML =
+      `<b>${D.esc(c.subject || '')}</b><br>` +
+      `<span class="m">${D.esc(c.short || '')} · ${D.esc(c.author || '')} · ${D.esc(D.ago(c.time))} önce</span><br>` +
+      `<span class="m">tıkla: commit kimliğini kopyala</span>`;
+    return place();
+  }
   const b = galaxy.hover && galaxy.bodies.get(galaxy.hover)?.L.b;
   if (!b) return void (tip.hidden = true);
-  const r = (tip.offsetParent || tip.parentElement).getBoundingClientRect();
   tip.innerHTML =
     `<b>${D.esc(b.name)}</b>${b.current ? ' · <span class="m">şu an burada</span>' : ''}<br>` +
     `<span class="m">${D.esc(b.subject || '')}</span><br>` +
     `${galaxy.data.main ? `${D.esc(galaxy.data.main)}'e göre: <b>+${b.ahead | 0}</b> önde · <b>−${b.behind | 0}</b> geride<br>` : ''}` +
     `${D.esc(SYNC_TEXT[b.sync] || '')}${b.remote ? ` <span class="m">(${D.esc(b.remote)})</span>` : ''}<br>` +
     `<span class="m">son commit ${D.esc(D.ago(b.time))} önce · ${D.esc(String(b.hash || '').slice(0, 8))}</span>`;
-  tip.hidden = false;
-  tip.style.left = Math.min(e.clientX - r.left + 14, r.width - 330) + 'px';
-  tip.style.top = e.clientY - r.top + 14 + 'px';
+  place();
 }
 
 const DAY = 86_400_000;
@@ -1458,6 +1555,22 @@ function updateGalaxy(dt, t, now, low) {
     gRing.scale.setScalar(mg.L.size * 1.5);
   }
   gRing.quaternion.copy(camera.quaternion);
+
+  // commit moons around the selected branch: they pop out one after another, the newest closest in
+  const m = galaxy.moons;
+  const mb = m && m.meshes.length && galaxy.bodies.get(m.name);
+  if (mb) {
+    const since = (now - m.born) / 700;
+    for (const mesh of m.meshes) {
+      const { k, phase, tilt, commit } = mesh.userData;
+      const q = Math.max(0, Math.min(1, since - k * 0.08));
+      const out = 1 - (1 - q) ** 3;
+      const r = (mb.mesh.scale.x * 1.5 + 5 + k * 2.4) * out;
+      const a = t * (0.9 - k * 0.035) + phase;
+      mesh.position.set(Math.cos(a) * r, Math.sin(a) * r * tilt, Math.sin(a) * r);
+      mesh.scale.setScalar((commit.hash === galaxy.hoverCommit ? 3.6 : 2.4) * Math.max(0.05, out));
+    }
+  }
 }
 
 // Branch labels sit under their body; one that would cover a nearer label fades (the marked one always shows).
