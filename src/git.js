@@ -264,6 +264,39 @@ class Git {
     return { root: r, name: path.basename(r), main: main ? main.short : null, head: head ? head.name : null, branches };
   }
 
+  // The commits a branch has that main lacks (newest first, at most `max`), for the moons around a branch in the
+  // galaxy. `name` must be one of the repository's branches as branches() names them; it is looked up among the
+  // refs and only that full ref goes on the command line, so no revision syntax ("a..b", "HEAD~3", "-x") gets in.
+  async branchCommits(r, name, max = 12) {
+    r = this.repo(r);
+    if (typeof name !== 'string' || !name || name.length > 255) throw new Error('Geçersiz branch');
+    const refs = parseRefs(await git(r, ['for-each-ref', `--format=${REF_FORMAT}`, 'refs/heads', 'refs/remotes'], { timeout: 8000 }));
+    const strip = (x) => (x.remote ? x.name.slice(x.remote.length + 1) : x.name);
+    // the same choice as branches(): the local branch, else origin's copy, else another remote's
+    const tip =
+      refs.find((x) => !x.remote && x.name === name) ||
+      refs.find((x) => x.remote === 'origin' && strip(x) === name) ||
+      refs.find((x) => x.remote && strip(x) === name);
+    if (!tip) throw new Error('Branch bulunamadı');
+    const main = await mainRef(r, refs);
+    const range = main ? [`${main.ref}..${tip.ref}`] : [tip.ref];
+    if (main && (tip.ref === main.ref || name === main.short)) return { branch: name, base: main.short, total: 0, commits: [] };
+    const n = Math.max(1, Math.min(50, max | 0));
+    const [count, out] = await Promise.all([
+      git(r, ['rev-list', '--count', ...range, '--'], { timeout: 5000 }),
+      git(r, ['log', `-n${n}`, '--format=%H%x1f%h%x1f%an%x1f%ct%x1f%s', ...range, '--'], { timeout: 8000 }),
+    ]);
+    const commits = out
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => {
+        const [hash, short, author, time, ...subject] = line.split('\x1f');
+        return { hash, short, author, time: (Number(time) || 0) * 1000, subject: subject.join('\x1f') };
+      })
+      .filter((c) => /^[0-9a-f]{7,64}$/.test(c.hash));
+    return { branch: name, base: main ? main.short : null, total: Number(count.trim()) || commits.length, commits };
+  }
+
   async push(r) {
     return git(this.repo(r), ['push'], { timeout: 120_000 });
   }

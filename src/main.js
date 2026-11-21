@@ -416,16 +416,22 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.handle('git:log', wrap((r) => gitApi.log(r)));
     ipcMain.handle('git:show', wrap((r, hash) => gitApi.show(r, hash)));
     // The map's branch galaxy: asked for by session id, so the page can't name an arbitrary folder.
+    const sessionRepo = async (id) => {
+      const s = liveSession(String(id));
+      const [repo] = await gitApi.repos([s.cwd]);
+      if (!repo) throw new Error('Bu oturumun klasörü bir git deposu değil');
+      return repo.root;
+    };
     ipcMain.handle(
       'git:branches',
-      wrap(async (id) => {
-        const s = liveSession(String(id));
-        const [repo] = await gitApi.repos([s.cwd]);
-        if (!repo) throw new Error('Bu oturumun klasörü bir git deposu değil');
-        return gitApi.branches(repo.root);
-      }),
+      wrap(async (id) => gitApi.branches(await sessionRepo(id))),
     );
-    ipcMain.handle('git:push',wrap((r) => gitApi.push(r)));
+    // A branch's commits that main lacks: the moons around it in the galaxy. The name is checked against the refs.
+    ipcMain.handle(
+      'git:branch-commits',
+      wrap(async (id, name) => gitApi.branchCommits(await sessionRepo(id), String(name))),
+    );
+    ipcMain.handle('git:push', wrap((r) => gitApi.push(r)));
     ipcMain.handle('git:pull', wrap((r) => gitApi.pull(r)));
     ipcMain.handle('git:fetch', wrap((r) => gitApi.fetch(r)));
     ipcMain.handle(

@@ -54,5 +54,6 @@ contextBridge.exposeInMainWorld('agentinan', {
     pull: (r) => ipcRenderer.invoke('git:pull', r),
     fetch: (r) => ipcRenderer.invoke('git:fetch', r),
     branches: (sessionId) => ipcRenderer.invoke('git:branches', sessionId), // → { data: { root, main, branches } }
+    branchCommits: (sessionId, name) => ipcRenderer.invoke('git:branch-commits', sessionId, name), // → { data: { total, commits } }
   },
 });
