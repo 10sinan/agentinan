@@ -93,6 +93,8 @@ function parseRefs(out) {
 }
 
 // The branch the others are measured against: what origin/HEAD points at, else main, else master, else HEAD's.
+// origin's copy wins over the local one: the local main is often not pulled, and against it a branch already
+// merged on GitHub would still look ahead.
 async function mainRef(r, refs) {
   const has = (ref) => refs.find((x) => x.ref === ref);
   let target = '';
@@ -100,13 +102,10 @@ async function mainRef(r, refs) {
     target = (await git(r, ['symbolic-ref', '-q', 'refs/remotes/origin/HEAD'], { okCodes: [0, 1, 128], timeout: 5000 })).trim();
   } catch {}
   const short = (ref) => ref.replace(/^refs\/(heads|remotes\/[^/]+)\//, '');
-  if (target && has(target)) {
-    const name = short(target);
-    return { ref: has(`refs/heads/${name}`) ? `refs/heads/${name}` : target, short: name };
-  }
+  if (target && has(target)) return { ref: target, short: short(target) };
   for (const n of ['main', 'master']) {
-    if (has(`refs/heads/${n}`)) return { ref: `refs/heads/${n}`, short: n };
     if (has(`refs/remotes/origin/${n}`)) return { ref: `refs/remotes/origin/${n}`, short: n };
+    if (has(`refs/heads/${n}`)) return { ref: `refs/heads/${n}`, short: n };
   }
   const cur = refs.find((x) => x.current);
   return cur ? { ref: cur.ref, short: cur.name } : null;
