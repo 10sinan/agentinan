@@ -6,9 +6,16 @@ const path = require('path');
 
 const MAX_DIFF = 600 * 1024;
 
+// Agentinan runs git on its own (status every few seconds, in every folder a session works in), so a repository's
+// config must not get to run programs: core.fsmonitor is a command git status would start, and a diff driver
+// (diff.external, or a textconv picked by .gitattributes) is one git diff / git show would start. Hooks still run on
+// commit and push, as the user asked for those.
+const SAFE_CONFIG = ['-c', 'core.fsmonitor=false'];
+const NO_DRIVERS = ['--no-ext-diff', '--no-textconv'];
+
 function git(cwd, args, { okCodes = [0], timeout = 20_000, maxBuffer = 16 * 1024 * 1024 } = {}) {
   return new Promise((resolve, reject) => {
-    execFile('git', args, { cwd, timeout, maxBuffer, env: { ...process.env, GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C' } }, (err, stdout, stderr) => {
+    execFile('git', [...SAFE_CONFIG, ...args], { cwd, timeout, maxBuffer, env: { ...process.env, GIT_TERMINAL_PROMPT: '0', LC_ALL: 'C' } }, (err, stdout, stderr) => {
       const code = err ? (typeof err.code === 'number' ? err.code : -1) : 0;
       if (!okCodes.includes(code)) return reject(new Error((stderr || stdout || String(err)).trim().split('\n').slice(-3).join('\n')));
       resolve(stdout);
@@ -109,14 +116,14 @@ class Git {
   async diff(r, file, kind) {
     r = this.repo(r);
     file = safePath(file);
-    if (kind === 'untracked') return clipDiff(await git(r, ['diff', '--no-color', '--no-index', '--', '/dev/null', file], { okCodes: [0, 1] }));
-    if (kind === 'conflict') return clipDiff(await git(r, ['diff', '--no-color', '--', file], { okCodes: [0, 1] }));
+    if (kind === 'untracked') return clipDiff(await git(r, ['diff', '--no-color', ...NO_DRIVERS, '--no-index', '--', '/dev/null', file], { okCodes: [0, 1] }));
+    if (kind === 'conflict') return clipDiff(await git(r, ['diff', '--no-color', ...NO_DRIVERS, '--', file], { okCodes: [0, 1] }));
     if (kind === 'head') {
       // staged and unstaged changes together; a repository without commits has no HEAD, so compare the index instead
       const hasHead = await git(r, ['rev-parse', '--verify', '-q', 'HEAD'], { okCodes: [0, 1] }).then((o) => !!o.trim());
-      return clipDiff(await git(r, ['diff', '--no-color', hasHead ? 'HEAD' : '--cached', '--', file]));
+      return clipDiff(await git(r, ['diff', '--no-color', ...NO_DRIVERS, hasHead ? 'HEAD' : '--cached', '--', file]));
     }
-    const args = ['diff', '--no-color'];
+    const args = ['diff', '--no-color', ...NO_DRIVERS];
     if (kind === 'staged') args.push('--cached');
     return clipDiff(await git(r, [...args, '--', file]));
   }
@@ -155,7 +162,7 @@ class Git {
   }
 
   async show(r, hash) {
-    return clipDiff(await git(this.repo(r), ['show', '--no-color', '--stat', '--patch', '--format=commit %H%nYazar: %an <%ae>%nTarih: %ad%n%n%B', safeHash(hash)]));
+    return clipDiff(await git(this.repo(r), ['show', '--no-color', ...NO_DRIVERS, '--stat', '--patch', '--format=commit %H%nYazar: %an <%ae>%nTarih: %ad%n%n%B', safeHash(hash)]));
   }
 
   async push(r) {
