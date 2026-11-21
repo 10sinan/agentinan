@@ -43,7 +43,7 @@
     terms.set(key, t);
     api.attach(key).then((r) => {
       if (!r || r.error) {
-        term.write(`\r\n\x1b[31mBağlanılamadı${r && r.error ? ': ' + r.error : ''}\x1b[0m\r\n`);
+        term.write(`\r\n\x1b[31mBağlanılamadı${r && r.error ? ': ' + window.plainText(r.error) : ''}\x1b[0m\r\n`); // a message, not terminal output: no escape sequences from it
         t.dead = true;
         t.deadAt = Date.now();
         return;
