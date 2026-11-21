@@ -47,7 +47,13 @@
             <span><i class="sdot idle"></i>Boşta</span>
             <span><i class="sdot moon"></i>Alt ajan</span>
           </div>
-          <div class="hint">Sürükle: döndür · Tekerlek: yakınlaş · Tıkla: seç · Çift tık / Enter: terminal · Tab: sıradaki</div>
+          <div class="hint">Sürükle: döndür · Tekerlek: yakınlaş · Tıkla: seç · Çift tık / Enter: terminal · Tab: sıradaki · G: branch galaksisi</div>
+          <div class="galaxy-bar glass" id="galaxyBar" hidden>
+            <button class="btn sm ghost" id="galaxyBack" title="Haritaya dön (Esc)"><i data-icon="orbit"></i>Harita</button>
+            <span class="gx-title" id="galaxyTitle"></span>
+            <span class="gx-info" id="galaxyInfo"></span>
+            <button class="btn sm ghost icon-only" id="galaxyFetch" title="origin'den getir (git fetch)"><i data-icon="refresh"></i></button>
+          </div>
           <button class="btn sm replay-btn glass" id="replayBtn" title="Bugünün oturumlarını hızlıca yeniden oynat"><i data-icon="play"></i>Günü oynat</button>
           <div class="replay-bar glass" id="replayBar" hidden>
             <button class="btn sm ghost icon-only" id="replayPlay" title="Duraklat (Boşluk)"><i data-icon="pause"></i></button>

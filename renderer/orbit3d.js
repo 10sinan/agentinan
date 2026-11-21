@@ -7,6 +7,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { makeBody, stepBodies } from './physics.mjs';
+import { branchLayout } from './galaxy.mjs';
 
 const D = window.dash;
 const host = document.getElementById('scene');
@@ -49,7 +50,8 @@ controls.addEventListener('end', () => {
 });
 
 const composer = new EffectComposer(renderer);
-composer.addPass(new RenderPass(scene, camera));
+const renderPass = new RenderPass(scene, camera); // its scene is swapped for the branch galaxy's while that is open
+composer.addPass(renderPass);
 const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.85, 0.55, 0.62);
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
@@ -736,6 +738,7 @@ let hoverId = null;
 let downAt = null;
 
 function pick(e) {
+  if (galaxy) return null; // the solar system's planets are not on screen then (see gPick)
   const r = labels.domElement.getBoundingClientRect();
   mouse.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
   ray.setFromCamera(mouse, camera);
@@ -745,6 +748,7 @@ function pick(e) {
 
 labels.domElement.addEventListener('pointermove', (e) => {
   if (drag && drag.active) return;
+  if (galaxy) return void galaxyHover(e);
   hoverId = pick(e);
   labels.domElement.style.cursor = hoverId ? 'pointer' : 'grab';
   const s = hoverId && D.snap().sessions.find((v) => v.id === hoverId);
@@ -842,6 +846,11 @@ window.addEventListener('pointercancel', endDrag);
 window.addEventListener('blur', endDrag);
 labels.domElement.addEventListener('pointerup', (e) => {
   if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 5) return; // a drag, not a click
+  if (galaxy) {
+    const b = gPick(e);
+    galaxy.selected = b && b !== galaxy.selected ? b : null;
+    return renderGalaxyBar();
+  }
   const id = pick(e);
   D.select(id && id !== D.selected() ? id : null, true);
 });
@@ -867,6 +876,19 @@ document.addEventListener('keydown', (e) => {
   if (document.activeElement?.matches('input, textarea, select, [contenteditable="true"]')) return;
   if (document.querySelector('.modal:not([hidden])')) return;
   const sel = D.selected();
+  if (galaxy) {
+    // the galaxy has its own keys: back to the map, nothing else (Tab/Enter/Space act on planets)
+    if (e.key === 'Escape' || e.key === 'g' || e.key === 'G') {
+      e.preventDefault();
+      closeGalaxy();
+    }
+    return;
+  }
+  if ((e.key === 'g' || e.key === 'G') && !e.shiftKey && !replay) {
+    e.preventDefault();
+    openGalaxy(sel);
+    return;
+  }
   if (e.key === 'Tab') {
     // planets in orbit order, nearest the sun first
     const order = [...planets.values()].sort((a, b) => a.radius - b.radius).map((p) => p.id);
@@ -1188,6 +1210,295 @@ rRange.addEventListener('input', () => {
   replayFrame();
 });
 
+// ---------- branch galaxy: a session's repository, main in the middle and its branches around it ----------
+// Opened from a selected planet (G, or the card's button). It is drawn as its own scene, so the solar system stays
+// exactly as it is underneath (snapshots keep updating it) and comes back unchanged when the galaxy closes. Read only:
+// local branches and origin/* as of the last fetch (git:branches), laid out by galaxy.mjs.
+const gScene = new THREE.Scene();
+gScene.background = scene.background; // the same Color objects, so the theme recolours both
+gScene.fog = scene.fog;
+gScene.add(new THREE.AmbientLight('#4a5680', 0.6));
+const gLight = new THREE.PointLight('#d6e4ff', 3, 0, 0);
+gScene.add(gLight);
+const gStars = starField(1800, 1500, 3200, 1.4, 0.8);
+gScene.add(gStars);
+const gStar = new THREE.Group();
+const gStarMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(24, 48, 32),
+  new THREE.MeshBasicMaterial({ map: surfaceTexture(11, false), color: new THREE.Color('#9cc4ff').multiplyScalar(1.5), fog: false }),
+);
+const gStarHalo = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color: '#6fa8ff', transparent: true, opacity: 0.6, depthWrite: false, fog: false, blending: THREE.AdditiveBlending }));
+gStarHalo.scale.setScalar(170);
+gStar.add(gStarMesh, gStarHalo);
+const gStarEl = document.createElement('div');
+gStarEl.className = 'sun-label gx-label';
+const gStarLabel = new CSS2DObject(gStarEl);
+gStarLabel.position.set(0, -38, 0);
+gStar.add(gStarLabel);
+gScene.add(gStar);
+// the ring around the hovered / selected branch
+const gRing = new THREE.Mesh(
+  new THREE.RingGeometry(1.0, 1.06, 64),
+  new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false }),
+);
+gScene.add(gRing);
+
+const gxBar = document.getElementById('galaxyBar');
+const gxTitle = document.getElementById('galaxyTitle');
+const gxInfo = document.getElementById('galaxyInfo');
+const gxFetch = document.getElementById('galaxyFetch');
+const mapHint = document.querySelector('.view[data-view="map"] .hint') || document.querySelector('.hint');
+const HINT_MAP = mapHint ? mapHint.textContent : '';
+const HINT_GALAXY = 'Sürükle: döndür · Tekerlek: yakınlaş · Tıkla: branch seç · Esc / G: haritaya dön';
+const SYNC_TEXT = {
+  same: 'origin ile aynı',
+  ahead: '↑ push edilmemiş commit var',
+  behind: "↓ origin'de yeni commit var",
+  diverged: '↕ origin ile ayrışmış',
+  'local-only': 'sadece yerelde',
+  'remote-only': "sadece origin'de",
+};
+
+let galaxy = null; // { id, data, bodies: Map name → body, selected, hover, bornAt, timer, sig, stale }
+let galaxyOpening = false;
+const gPickables = [];
+
+function gOrbitPoint(g, a, out) {
+  out.set(Math.cos(a) * g.radius, 0, Math.sin(a) * g.radius);
+  out.applyEuler(g.tilt);
+  return out;
+}
+
+function makeBranchBody(L, angle) {
+  const h = hash(L.b.name);
+  const remote = L.tone === 'remote';
+  const color = L.tone === 'current' ? ORBIT.selected.clone() : remote ? new THREE.Color('#8b93ad') : new THREE.Color().setHSL(L.hue / 360, 0.55, 0.6);
+  const group = new THREE.Group();
+  const mesh = new THREE.Mesh(
+    new THREE.SphereGeometry(1, 32, 22),
+    new THREE.MeshStandardMaterial({ map: surfaceTexture(h, true, L.hue), color, emissive: color.clone().multiplyScalar(0.28), roughness: 0.8, metalness: 0.05, transparent: remote, opacity: remote ? 0.45 : 1 }),
+  );
+  mesh.userData.branch = L.b.name;
+  group.add(mesh);
+  gPickables.push(mesh);
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: GLOW, color, transparent: true, opacity: remote ? 0.18 : 0.4, depthWrite: false, blending: THREE.AdditiveBlending }));
+  group.add(halo);
+  const tilt = new THREE.Euler((((h >> 8) % 100) / 100) * 0.24 - 0.12, 0, (((h >> 16) % 100) / 100) * 0.24 - 0.12);
+  const g = { L, group, mesh, halo, color, tilt, radius: L.radius, angle: angle ?? L.angle, spin: 0.1 + ((h >> 4) % 10) / 50 };
+  const pts = [];
+  const v = new THREE.Vector3();
+  for (let i = 0; i <= 128; i++) pts.push(gOrbitPoint(g, (i / 128) * Math.PI * 2, v).clone());
+  g.orbit = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints(pts),
+    new THREE.LineBasicMaterial({ color: L.tone === 'current' ? ORBIT.selected : ORBIT.line, transparent: true, opacity: remote ? 0.1 : 0.2, depthWrite: false }),
+  );
+  gScene.add(g.orbit);
+  // branch names and commit subjects come from the repository: escaped like everything else on the map
+  g.el = document.createElement('div');
+  g.el.className = `planet-label gx-label${L.tone === 'current' ? ' gx-cur' : ''}${remote ? ' gx-remote' : ''}`;
+  g.el.style.setProperty('--proj', `#${color.getHexString()}`);
+  const b = L.b;
+  g.el.innerHTML = `<b>${D.esc(b.name)}${L.badge ? ` <i class="gx-badge">${L.badge}</i>` : ''}</b><span>+${b.ahead | 0} −${b.behind | 0}${b.current ? ' · şu an burada' : ''}</span>`;
+  g.label = new CSS2DObject(g.el);
+  group.add(g.label);
+  gScene.add(group);
+  return g;
+}
+
+function disposeBranchBody(g) {
+  gScene.remove(g.group, g.orbit);
+  g.group.remove(g.label);
+  g.el.remove();
+  for (const o of [g.mesh, g.halo, g.orbit]) {
+    if (o.geometry && o.geometry !== g.halo.geometry) o.geometry.dispose();
+    if (o.material.map && o.material.map !== GLOW) o.material.map.dispose();
+    o.material.dispose();
+  }
+  const i = gPickables.indexOf(g.mesh);
+  if (i >= 0) gPickables.splice(i, 1);
+}
+
+// New data: rebuilt only when something changed; a branch that stays keeps its place on its orbit.
+function setGalaxyData(data) {
+  const sig = JSON.stringify(data);
+  galaxy.stale = false;
+  if (sig === galaxy.sig) return renderGalaxyBar();
+  galaxy.sig = sig;
+  galaxy.data = data;
+  const angles = new Map([...galaxy.bodies].map(([n, g]) => [n, g.angle]));
+  for (const g of galaxy.bodies.values()) disposeBranchBody(g);
+  galaxy.bodies.clear();
+  const { star, bodies } = branchLayout(data);
+  for (const L of bodies) galaxy.bodies.set(L.b.name, makeBranchBody(L, angles.get(L.b.name)));
+  if (galaxy.selected && !galaxy.bodies.has(galaxy.selected)) galaxy.selected = null;
+  gStarEl.innerHTML = `<b>${D.esc(data.name || '')}</b> · ${star ? D.esc(star.name) : 'ana dal yok'}`;
+  renderGalaxyBar();
+}
+
+function renderGalaxyBar() {
+  if (!galaxy || !galaxy.data) return;
+  const d = galaxy.data;
+  gxTitle.innerHTML = `${window.icon('branch')}<b>${D.esc(d.name || '')}</b>`;
+  const b = galaxy.selected && galaxy.bodies.get(galaxy.selected)?.L.b;
+  if (b) {
+    gxInfo.innerHTML = `<b>${D.esc(b.name)}</b> · +${b.ahead | 0} −${b.behind | 0} · ${D.esc(SYNC_TEXT[b.sync] || '')} · <span class="m">${D.esc(b.subject || '')}</span>`;
+  } else {
+    const n = d.branches.length;
+    const local = d.branches.filter((x) => x.hasLocal).length;
+    gxInfo.textContent = `${n} branch · ${local} yerelde · ana dal ${d.main || '—'}${galaxy.stale ? ' · oturum kapandı, son okunan hali' : ''}`;
+  }
+}
+
+async function loadGalaxy() {
+  if (!galaxy) return null;
+  const id = galaxy.id;
+  const r = await window.agentinan.git.branches(id).catch((e) => ({ error: String(e) }));
+  if (!galaxy || galaxy.id !== id) return null; // closed (or another one opened) meanwhile
+  if (r && r.data) setGalaxyData(r.data);
+  else {
+    galaxy.stale = true; // e.g. the session ended: keep showing what was read last
+    renderGalaxyBar();
+  }
+  return r;
+}
+
+async function openGalaxy(id) {
+  if (!id) return D.toast('Önce haritada bir gezegen seç');
+  if (galaxyOpening) return;
+  if (galaxy && galaxy.id === id) return;
+  galaxyOpening = true;
+  let r;
+  try {
+    r = await window.agentinan.git.branches(id);
+  } catch (e) {
+    r = { error: String(e) };
+  } finally {
+    galaxyOpening = false;
+  }
+  if (!r || r.error) return D.toast(r?.error || "Branch'ler okunamadı");
+  if (replay) stopReplay();
+  if (galaxy) closeGalaxy(true);
+  galaxy = { id, data: null, bodies: new Map(), selected: null, hover: null, bornAt: performance.now(), sig: '', stale: false, timer: setInterval(loadGalaxy, 10_000) };
+  setGalaxyData(r.data);
+  if (drag) drag = null;
+  hoverId = null;
+  tip.hidden = true;
+  labels.domElement.classList.add('galaxy');
+  gxBar.hidden = false;
+  rBtn.hidden = true;
+  if (mapHint) mapHint.textContent = HINT_GALAXY;
+}
+
+function closeGalaxy(quiet) {
+  if (!galaxy) return;
+  clearInterval(galaxy.timer);
+  for (const g of galaxy.bodies.values()) disposeBranchBody(g);
+  galaxy = null;
+  gRing.material.opacity = 0;
+  tip.hidden = true;
+  if (quiet) return;
+  labels.domElement.classList.remove('galaxy');
+  labels.domElement.style.cursor = 'grab';
+  gxBar.hidden = true;
+  rBtn.hidden = false;
+  if (mapHint) mapHint.textContent = HINT_MAP;
+}
+
+function gPick(e) {
+  const r = labels.domElement.getBoundingClientRect();
+  mouse.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(mouse, camera);
+  const hit = ray.intersectObjects(gPickables, false)[0];
+  return hit ? hit.object.userData.branch : null;
+}
+
+function galaxyHover(e) {
+  galaxy.hover = gPick(e);
+  labels.domElement.style.cursor = galaxy.hover ? 'pointer' : 'grab';
+  const b = galaxy.hover && galaxy.bodies.get(galaxy.hover)?.L.b;
+  if (!b) return void (tip.hidden = true);
+  const r = (tip.offsetParent || tip.parentElement).getBoundingClientRect();
+  tip.innerHTML =
+    `<b>${D.esc(b.name)}</b>${b.current ? ' · <span class="m">şu an burada</span>' : ''}<br>` +
+    `<span class="m">${D.esc(b.subject || '')}</span><br>` +
+    `${galaxy.data.main ? `${D.esc(galaxy.data.main)}'e göre: <b>+${b.ahead | 0}</b> önde · <b>−${b.behind | 0}</b> geride<br>` : ''}` +
+    `${D.esc(SYNC_TEXT[b.sync] || '')}${b.remote ? ` <span class="m">(${D.esc(b.remote)})</span>` : ''}<br>` +
+    `<span class="m">son commit ${D.esc(D.ago(b.time))} önce · ${D.esc(String(b.hash || '').slice(0, 8))}</span>`;
+  tip.hidden = false;
+  tip.style.left = Math.min(e.clientX - r.left + 14, r.width - 330) + 'px';
+  tip.style.top = e.clientY - r.top + 14 + 'px';
+}
+
+const DAY = 86_400_000;
+function updateGalaxy(dt, t, now, low) {
+  gStarMesh.rotation.y += dt * 0.05;
+  gStarHalo.scale.setScalar(170 + Math.sin(t * 0.9) * 6);
+  gStars.rotation.y += dt * 0.004;
+  const e = Math.min(1, (now - galaxy.bornAt) / 1600);
+  const grow = 1 - (1 - e) ** 3; // the branches spiral out of main when the galaxy opens
+  const mark = galaxy.hover || galaxy.selected;
+  for (const g of galaxy.bodies.values()) {
+    const b = g.L.b;
+    const recent = b.time && Date.now() - b.time < 2 * DAY;
+    g.angle += ((recent ? 0.2 : 0.04) * dt * 140) / g.radius;
+    gOrbitPoint(g, g.angle, g.group.position);
+    if (grow < 1) g.group.position.multiplyScalar(grow).applyAxisAngle(UP, (1 - grow) * 2.4);
+    const size = g.L.size * Math.max(0.04, grow);
+    g.mesh.scale.setScalar(size);
+    g.mesh.rotation.y += dt * g.spin;
+    g.halo.visible = !low;
+    g.halo.scale.setScalar(size * (b.current ? 4.6 + Math.sin(t * 2.4) * 0.4 : 3.2));
+    if (b.current) g.mesh.material.color.copy(ORBIT.selected);
+    g.orbit.material.opacity = (g.L.tone === 'remote' ? 0.1 : 0.2) + (b.name === mark ? 0.4 : 0);
+  }
+  const mg = mark && galaxy.bodies.get(mark);
+  gRing.material.opacity += ((mg ? 0.9 : 0) - gRing.material.opacity) * Math.min(1, dt * 8);
+  if (mg) {
+    gRing.position.copy(mg.group.position);
+    gRing.scale.setScalar(mg.L.size * 1.5);
+  }
+  gRing.quaternion.copy(camera.quaternion);
+}
+
+// Branch labels sit under their body; one that would cover a nearer label fades (the marked one always shows).
+function cullGalaxyLabels() {
+  const w = host.clientWidth;
+  const h = host.clientHeight;
+  placed.length = 0;
+  proj.set(0, 0, 0).project(camera);
+  placed.push({ x: ((proj.x + 1) / 2) * w, y: ((1 - proj.y) / 2) * h + 40 });
+  const mark = galaxy.hover || galaxy.selected;
+  const order = [...galaxy.bodies.values()]
+    .map((g) => {
+      proj.copy(g.group.position).project(camera);
+      return { g, x: ((proj.x + 1) / 2) * w, y: ((1 - proj.y) / 2) * h, z: proj.z, keep: g.L.b.name === mark || g.L.b.current };
+    })
+    .sort((a, b) => b.keep - a.keep || a.z - b.z);
+  for (const o of order) {
+    const hit = placed.some((q) => Math.abs(q.x - o.x) < 140 && Math.abs(q.y - o.y) < 36);
+    const dist = camera.position.distanceTo(o.g.group.position);
+    const pxPerUnit = h / 2 / (Math.tan((camera.fov * Math.PI) / 360) * dist);
+    o.g.el.style.marginTop = Math.round(o.g.mesh.scale.x * 1.25 * pxPerUnit + 22) + 'px';
+    o.g.el.classList.toggle('faded', hit && !o.keep);
+    if (!hit || o.keep) placed.push(o);
+  }
+}
+
+document.getElementById('galaxyBack').onclick = () => closeGalaxy();
+gxFetch.onclick = async () => {
+  if (!galaxy || !galaxy.data) return;
+  gxFetch.disabled = true;
+  try {
+    const r = await window.agentinan.git.fetch(galaxy.data.root);
+    if (r && r.error) D.toast(`Fetch olmadı: ${r.error}`);
+    else D.toast("origin'den getirildi");
+    await loadGalaxy();
+  } finally {
+    gxFetch.disabled = false;
+  }
+};
+window.addEventListener('dash:galaxy', (e) => openGalaxy(e.detail && e.detail.id));
+
 // ---------- animation ----------
 const clock = new THREE.Clock();
 const tmp = new THREE.Vector3();
@@ -1214,6 +1525,23 @@ function animate(now = 0) {
   const t = clock.elapsedTime;
 
   if (replay && replay.playing) advanceReplay(dt);
+
+  if (galaxy) {
+    // the galaxy's own scene; the solar system is left as it is and picks up again when the galaxy closes
+    updateGalaxy(dt, t, now, low);
+    focus.lerp(tmp.set(0, 0, 0), Math.min(1, dt * 2.5));
+    camDir.subVectors(focus, controls.target);
+    controls.target.add(camDir);
+    camera.position.add(camDir);
+    controls.update();
+    renderPass.scene = gScene;
+    if (low) renderer.render(gScene, camera);
+    else composer.render();
+    cullGalaxyLabels();
+    labels.render(gScene, camera);
+    return;
+  }
+  renderPass.scene = scene;
 
   sunMesh.rotation.y += dt * 0.05;
   const busy = [...planets.values()].some((p) => p.status === 'busy');

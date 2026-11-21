@@ -331,6 +331,7 @@ function detail(s, hog) {
       <div class="sd-path" title="${esc(s.cwd)}">${esc(s.cwd)}</div>
       <div class="sd-actions">
         <button class="btn sm" data-act="map">haritada</button>
+        <button class="btn sm" data-act="galaxy" title="Bu oturumun deposundaki branch'ler, haritada">galaksi</button>
         ${s.control ? `<button class="btn sm" data-act="term">terminal</button>` : ''}
         <button class="btn sm" data-act="open">klasör</button>
         <button class="btn sm" data-act="resume" title="claude --resume komutunu kopyala">--resume</button>
@@ -371,12 +372,20 @@ $('grid').addEventListener('click', (e) => {
     select(s.id);
     return setTab('map');
   }
+  if (act === 'galaxy') return void openGalaxy(s);
   if (act === 'term') {
     select(s.id);
     return setTab('terminal');
   }
   if (el.classList.contains('srow')) select(selected === s.id ? null : s.id);
 });
+
+// The session's branch galaxy, on the map (orbit3d.js draws it).
+function openGalaxy(s) {
+  select(s.id);
+  setTab('map');
+  window.dispatchEvent(new CustomEvent('dash:galaxy', { detail: { id: s.id } }));
+}
 
 // ---------- map info card ----------
 function renderMapCard() {
@@ -410,6 +419,7 @@ function renderMapCard() {
     }
     <div class="mc-actions">
       ${s.control ? `<button class="btn sm" data-act="term">${icon('terminal')}Terminal</button>` : `<span class="pill" title="Agentinan dışında açılan oturumlara komut gönderilemez">${icon('eye')}Sadece izleme</span>`}
+      <button class="btn sm" data-act="galaxy" title="Bu oturumun deposundaki branch'ler (G)">${icon('branch')}Galaksi</button>
       <button class="btn sm" data-act="details">Ayrıntılar</button>
       ${delButton(s)}
       <button class="btn sm ghost" data-act="close" title="Seçimi kaldır">${icon('x')}</button>
@@ -580,6 +590,7 @@ $('mapCard').addEventListener('click', (e) => {
   const s = snap.sessions.find((x) => x.id === selected);
   if (act === 'term') setTab('terminal');
   if (act === 'details') setTab('sessions');
+  if (act === 'galaxy' && s) openGalaxy(s);
   if (act === 'close') select(null);
   if (act === 'rename' && s) openRename(s);
   if (act === 'delete' && s) askDelete(s);
