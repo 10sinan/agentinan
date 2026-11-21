@@ -14,6 +14,10 @@
 export const INNER = 110; // the closest orbit
 export const SPREAD = 70; // extra orbit radius per e-fold of divergence
 export const MIN_GAP = 34; // two branches never share an orbit closer than this
+export const MIN_ANGLE = 0.9; // neighbouring orbits start at least this far apart (radians), so labels don't pile up
+
+const TAU = Math.PI * 2;
+const wrap = (a) => ((((a + Math.PI) % TAU) + TAU) % TAU) - Math.PI; // → [-π, π)
 
 export function hash(str) {
   let h = 2166136261;
@@ -32,15 +36,24 @@ export function branchLayout(data) {
   rest.sort((a, b) => drift(a) - drift(b) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   const bodies = [];
   let last = -Infinity;
+  let prevAngle = null;
   for (const b of rest) {
     let radius = INNER + SPREAD * Math.log1p(drift(b));
     if (radius - last < MIN_GAP) radius = last + MIN_GAP; // keep orbits apart, still in drift order
     last = radius;
     const h = hash(b.name);
+    // from the name, but pushed away from the orbit just inside when the two would start side by side
+    // (neighbouring orbits are only MIN_GAP apart: their bodies and labels would overlap)
+    let angle = ((h % 3600) / 3600) * TAU;
+    if (prevAngle !== null) {
+      const d = wrap(angle - prevAngle);
+      if (Math.abs(d) < MIN_ANGLE) angle = (((prevAngle + (d < 0 ? -MIN_ANGLE : MIN_ANGLE)) % TAU) + TAU) % TAU;
+    }
+    prevAngle = angle;
     bodies.push({
       b,
       radius,
-      angle: ((h % 3600) / 3600) * Math.PI * 2,
+      angle,
       size: 7 + 4 * Math.log1p(Math.max(0, b.ahead | 0)),
       hue: h % 360,
       tone: b.current ? 'current' : b.hasLocal ? 'local' : 'remote',
