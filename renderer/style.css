@@ -1016,6 +1016,67 @@ textarea:focus {
   text-align: right;
 }
 
+/* branch galaxy: a bar at the top of the map; only the galaxy's labels show while it is open, and only the
+   solar system's otherwise (both scenes' labels live in the same layer; CSS2DRenderer sets display inline) */
+.labels.galaxy > :not(.gx-label),
+.labels:not(.galaxy) > .gx-label {
+  display: none !important;
+}
+.galaxy-bar {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(720px, calc(100% - 32px));
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 999px;
+}
+.galaxy-bar[hidden] {
+  display: none;
+}
+.gx-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  white-space: nowrap;
+}
+.gx-info {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.gx-info b {
+  color: var(--text);
+}
+.gx-info .m {
+  color: var(--muted, var(--text-2));
+}
+.planet-label.gx-label span {
+  color: var(--text-2);
+}
+.planet-label.gx-cur b {
+  color: var(--accent-2);
+}
+.planet-label.gx-remote {
+  opacity: 0.6;
+}
+.planet-label.gx-remote.faded {
+  opacity: 0;
+}
+.gx-badge {
+  font-style: normal;
+  font: 700 11px var(--mono);
+  color: var(--waiting);
+}
+
 /* ---------- sessions view: a table ---------- */
 .view[data-view='sessions'] .panel {
   display: flex;
