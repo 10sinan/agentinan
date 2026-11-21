@@ -16,7 +16,7 @@
   },
   "devDependencies": {
     "electron": "^45.4.1",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^26.18.1"
   },
   "dependencies": {
     "@fontsource/jetbrains-mono": "^5.1.1",
@@ -41,7 +41,17 @@
       "src/**",
       "renderer/**",
       "package.json",
-      "!**/*.test.js"
+      "!**/*.test.js",
+      {
+        "from": "node_modules/three/examples/jsm",
+        "to": "node_modules/three/examples/jsm",
+        "filter": [
+          "controls/**",
+          "postprocessing/**",
+          "renderers/**",
+          "shaders/**"
+        ]
+      }
     ],
     "asarUnpack": [
       "node_modules/@lydell/**"
