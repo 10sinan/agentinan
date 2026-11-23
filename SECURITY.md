@@ -24,6 +24,8 @@ Okuduğu ve yazdığı şeyler:
 ## Alınan önlemler
 
 - Electron'un güncel kararlı sürümü; `sandbox: true`, `contextIsolation: true`, `nodeIntegration: false`.
+- `renderer/index.html` Content-Security-Policy taşır (`default-src 'self'`, `object-src 'none'`, `base-uri 'none'`, `form-action 'none'`); `<webview>` ve tüm izin istekleri (kamera, konum vb.) reddedilir.
+- Agentinan'ın kendi ayar dosyaları ve `~/.claude/settings.json` atomik yazılır (geçici dosya + rename); `settings.json` için her yazmadan önce zaman damgalı yedek alınır (son 5 tutulur).
 - Pencere hiçbir adrese gitmez ve yeni pencere açamaz (`will-navigate`, `will-redirect`, `setWindowOpenHandler`).
 - Ana işleme gelen her IPC çağrısı (`ipcMain.handle` ve `ipcMain.on`) tek bir yerde sarılır ve yalnızca yerel `renderer/index.html` sayfasının üst çerçevesinden kabul edilir (`src/ipc-guard.js`).
 - `settings:set` yalnızca izin verilen anahtarları ve geçerli tür/aralıktaki değerleri kabul eder (`src/settings-schema.js`).
