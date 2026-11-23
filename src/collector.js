@@ -327,6 +327,42 @@ class Collector {
     return name;
   }
 
+  // What deleting a conversation would remove, for the confirmation dialog: { file, name, subagents } where
+  // `subagents` is the number of subagent transcripts in the folder next to it (0 when there is none).
+  deletePlan(sid, cwd) {
+    const file = this.transcriptFor(sid, cwd);
+    let subagents = 0;
+    const dir = file.replace(/\.jsonl$/, '');
+    try {
+      if (!fs.lstatSync(dir).isSymbolicLink() && realInside(PROJ_DIR, dir)) {
+        const walk = (d) => {
+          for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+            if (e.isDirectory()) walk(path.join(d, e.name));
+            else if (e.name.endsWith('.jsonl')) subagents++;
+          }
+        };
+        walk(dir);
+      }
+    } catch {}
+    return { file, name: path.basename(file), subagents };
+  }
+
+  // Like deleteSession, but moves the files to the trash through `trashItem(path) -> Promise` (Electron's
+  // shell.trashItem) so a mistake can be undone. If the trash is unavailable it throws and nothing is deleted.
+  async trashSession(sid, cwd, trashItem) {
+    const cached = this.fileOf.get(sid);
+    const file = this.transcriptFor(sid, cwd);
+    const dir = file.replace(/\.jsonl$/, '');
+    await trashItem(file);
+    try {
+      if (fs.lstatSync(dir).isSymbolicLink()) fs.unlinkSync(dir);
+      else if (realInside(PROJ_DIR, dir)) await trashItem(dir);
+    } catch {}
+    this.transcripts.delete(file);
+    if (cached) this.transcripts.delete(cached);
+    this.fileOf.delete(sid);
+  }
+
   // Permanently removes a conversation: its transcript and the folder holding its subagents' transcripts.
   deleteSession(sid, cwd) {
     const cached = this.fileOf.get(sid);

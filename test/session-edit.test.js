@@ -106,3 +106,26 @@ test('snapshot ignores session files with a bad pid or id and cleans status and 
   assert.strictEqual(ok.status, 'waiting');
   assert.strictEqual(ok.jobId, 'job_1-a');
 });
+
+test('deletePlan names the file and counts subagent transcripts without touching anything', () => {
+  fresh(prompt + "\n");
+  const plan = new Collector().deletePlan(SID, cwd);
+  assert.strictEqual(plan.name, SID + ".jsonl");
+  assert.strictEqual(plan.subagents, 1);
+  assert.ok(fs.existsSync(file));
+  assert.throws(() => new Collector().deletePlan("../x", cwd), /Geçersiz/);
+});
+
+test('trashSession hands the transcript and its folder to the trash function instead of deleting them', async () => {
+  fresh(prompt + "\n");
+  const moved = [];
+  await new Collector().trashSession(SID, cwd, async (p) => moved.push(p));
+  assert.deepStrictEqual(moved.map((p) => path.basename(p)), [SID + ".jsonl", SID]);
+  assert.ok(fs.existsSync(file)); // the fake trash left them: we never rm anything ourselves
+});
+
+test('trashSession deletes nothing when the trash refuses', async () => {
+  fresh(prompt + "\n");
+  await assert.rejects(new Collector().trashSession(SID, cwd, async () => { throw new Error("no trash"); }), /no trash/);
+  assert.ok(fs.existsSync(file));
+});

@@ -359,6 +359,18 @@ if (!app.requestSingleInstanceLock()) {
       'session:delete',
       wrap(async (id) => {
         const s = liveSession(String(id));
+        // Asked here, in the main process, so the page can't skip it: names what goes and says where it goes.
+        const plan = collector.deletePlan(s.id, s.cwd);
+        const { response } = await dialog.showMessageBox(win, {
+          type: 'warning',
+          title: 'Sohbeti sil',
+          message: 'Oturum kapatılıp sohbeti çöp kutusuna taşınacak',
+          detail: `Dosya: ${plan.name}\nAlt-ajan kaydı: ${plan.subagents}\nKlasör: ${s.cwd}\n\nDosyalar çöp kutusuna taşınır; oradan geri alınabilir.`,
+          buttons: ['Vazgeç', 'Çöpe taşı'],
+          defaultId: 0,
+          cancelId: 0,
+        });
+        if (response !== 1) return { cancelled: true };
         if (s.control) terminals.stop(s.control);
         else {
           try {
@@ -375,7 +387,7 @@ if (!app.requestSingleInstanceLock()) {
         };
         for (let i = 0; i < 30 && alive(); i++) await new Promise((r) => setTimeout(r, 200)); // it would rewrite the file while it lives
         if (alive()) throw new Error('Oturum kapanmadı; sohbet silinmedi');
-        collector.deleteSession(s.id, s.cwd);
+        await collector.trashSession(s.id, s.cwd, (p) => shell.trashItem(p));
         setTimeout(poll, 300);
         return true;
       }),

@@ -465,7 +465,7 @@ let delArmed = null;
 let delTimer = null;
 function delButton(s) {
   const on = delArmed === s.id;
-  return `<button class="btn sm ${on ? 'danger' : ''}" data-act="delete" title="Oturumu kapatır ve sohbeti kalıcı olarak siler">${icon('trash')}${on ? 'Emin misin? Tekrar bas' : 'sil'}</button>`;
+  return `<button class="btn sm ${on ? 'danger' : ''}" data-act="delete" title="Oturumu kapatır ve sohbeti çöp kutusuna taşır">${icon('trash')}${on ? 'Emin misin? Tekrar bas' : 'sil'}</button>`;
 }
 async function askDelete(s) {
   if (delArmed !== s.id) {
@@ -482,11 +482,11 @@ async function askDelete(s) {
   }
   clearTimeout(delTimer);
   delArmed = null;
-  toast('Oturum kapatılıp sohbet siliniyor…');
-  const r = await api.deleteSession(s.id);
+  const r = await api.deleteSession(s.id); // the main process shows the confirmation dialog
   if (r && r.error) toast('Silinemedi: ' + r.error);
+  else if (r && r.data && r.data.cancelled) toast('Vazgeçildi');
   else {
-    toast('Sohbet silindi');
+    toast('Sohbet çöp kutusuna taşındı');
     if (selected === s.id) select(null);
   }
   api.refresh();
