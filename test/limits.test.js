@@ -131,5 +131,16 @@ test('only the newest backups are kept', () => {
   const l = fresh();
   fs.writeFileSync(CLAUDE_SETTINGS, '{}');
   for (let i = 0; i < 15; i++) l.writeSettings({ i });
-  assert.ok(baks().length <= 10);
+  assert.strictEqual(baks().length, 5);
+  // the newest ones survive, not the oldest
+  assert.ok(baks().sort().every((f, i, a) => !i || a[i - 1] < f));
+});
+
+test('a value that is not a JSON object is refused before anything is written', () => {
+  const l = fresh();
+  const original = JSON.stringify({ theme: 'dark' });
+  fs.writeFileSync(CLAUDE_SETTINGS, original);
+  assert.throws(() => l.writeSettings([1, 2]), /beklenen biçimde değil/);
+  assert.throws(() => l.writeSettings(undefined));
+  assert.strictEqual(fs.readFileSync(CLAUDE_SETTINGS, 'utf8'), original);
 });
