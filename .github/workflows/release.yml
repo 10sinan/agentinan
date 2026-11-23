@@ -1,0 +1,38 @@
+name: release
+# A tag like v0.3.1 builds the AppImage and the RPM and attaches them (with SHA256SUMS) to a GitHub Release.
+on:
+  push:
+    tags: ['v*']
+# Only this job publishes, so it is the only one with write access, and only to contents (the release).
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      # pinned to commits (a tag can be moved to other code); same pins as test.yml
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+      # rpmbuild builds the RPM (scripts/build-rpm.sh); the spec turns automatic dependency detection off,
+      # so building it on Debian/Ubuntu works.
+      - run: sudo apt-get update && sudo apt-get install -y rpm
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      # the tag must name the version in package.json, or the files would be named after another release
+      - name: Tag matches package.json
+        run: |
+          [ "${GITHUB_REF_NAME}" = "v$(node -p "require('./package.json').version")" ] \
+            || { echo "tag ${GITHUB_REF_NAME} != package.json version" >&2; exit 1; }
+      # electron-builder downloads Electron itself; this makes dist/*.AppImage, the RPM and dist/SHA256SUMS
+      - run: npm run dist
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" --generate-notes \
+            dist/Agentinan-*.AppImage dist/agentinan-*.rpm dist/SHA256SUMS
