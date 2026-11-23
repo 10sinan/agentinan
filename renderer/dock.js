@@ -24,7 +24,7 @@
 
   function fitNow() {
     const s = current && shells.get(current);
-    if (!s || !open) return;
+    if (!s || !open || host.clientWidth < 40 || host.clientHeight < 40) return; // hidden or mid-layout: a fit now would shrink the pty to nothing
     try {
       s.fit.fit();
     } catch {}
@@ -46,10 +46,23 @@
     current = id;
     for (const [k, s] of shells) s.el.style.display = k === id ? 'block' : 'none';
     renderTabs();
-    requestAnimationFrame(() => {
-      fitNow();
-      shells.get(id)?.term.focus();
-    });
+    const s = shells.get(id);
+    // xterm measures its font when it is opened, which only works on a visible element: a restored shell is opened now
+    if (s && open && !s.opened) {
+      s.term.open(s.el);
+      s.opened = true;
+    }
+    // two frames: the drawer's height has to be laid out before it is measured
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        fitNow();
+        const t = shells.get(id)?.term;
+        if (t && open) {
+          t.refresh(0, t.rows - 1); // repaint with the new size, so nothing is left from before
+          t.focus();
+        }
+      }),
+    );
   }
 
   // The current project's folder, so "npm start" runs in the right place: the selected session's, else the one
@@ -82,9 +95,8 @@
     });
     const fit = new FitAddon.FitAddon();
     term.loadAddon(fit);
-    term.open(el);
     term.onData((d) => api.shellInput(r.id, d));
-    shells.set(r.id, { term, fit, el, name: r.name, cwd: r.cwd, dead: false });
+    shells.set(r.id, { term, fit, el, name: r.name, cwd: r.cwd, dead: false, opened: false }); // opened by show(), once visible
     if (early.has(r.id)) term.write(early.get(r.id).join('')), early.delete(r.id);
     show(r.id);
   }
@@ -110,9 +122,12 @@
     dock.style.height = height + 'px';
     document.body.classList.toggle('dock-open', v);
     $('dockBtn').classList.toggle('on', v);
+    notify();
     if (v && !shells.size) newShell();
     else if (v) show(current || [...shells.keys()][0]);
   }
+  // console.js moves the Claude terminal up by what the drawer covers (the drawer itself resizes nothing behind it)
+  const notify = () => window.dispatchEvent(new Event('dash:dock'));
   const toggle = () => setOpen(!open);
 
   $('dockBtn').onclick = toggle;
@@ -140,6 +155,7 @@
     const move = (m) => {
       height = Math.max(120, Math.min(window.innerHeight - 160, startH + (startY - m.clientY)));
       dock.style.height = height + 'px';
+      notify();
     };
     const up = () => {
       window.removeEventListener('pointermove', move);
