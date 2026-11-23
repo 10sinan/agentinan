@@ -388,8 +388,13 @@ body[data-tab='git'] .view[data-view='git'] {
 
 /* ---------- terminal drawer ---------- */
 .dock {
-  position: relative;
-  flex-shrink: 0;
+  /* floats over the bottom of the view instead of shrinking it: a Claude terminal underneath keeps its size, so its
+     pty is not resized (and its screen not garbled) every time the drawer opens or closes */
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
   min-height: 120px;
   border-radius: var(--r-lg);
   display: flex;
