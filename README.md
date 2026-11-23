@@ -35,9 +35,19 @@ Arayüz beş sekmeden oluşur: **Harita**, **Oturumlar**, **Terminal**, **Git** 
 - **Kullanım limitleri:** Pro / Max planının 5 saatlik ve haftalık limitinin ne kadarının kullanıldığı ve ne zaman sıfırlanacağı üst çubukta görünür; %80 ve %95'te bildirim gelir. Açmak için **Ayarlar → Kullanım limitleri → Etkinleştir**'e basın: Agentinan `~/.claude/settings.json` dosyasına (yedeğini alarak) bir `statusLine` ekler. Limitler, terminalde çalışan bir Claude Code oturumu istek yaptıkça güncellenir. Ayarlar'dan kaldırılınca eski hali geri gelir.
 - **Bildirimler:** "Seni beklediğinde bildir" ve "Bitirdiğinde bildir" ayarları **Ayarlar** sekmesinde. "Bitti" bildirimi, pencere öndeyken gönderilmez.
 
+## Ekran görüntüleri
+
+<!-- Görüntüleri docs/screenshots/ altına koyun ve aşağıdaki satırların yorumunu kaldırın. -->
+<!-- ![Yörünge haritası](docs/screenshots/map.png) -->
+<!-- ![Oturumlar](docs/screenshots/sessions.png) -->
+<!-- ![Terminal](docs/screenshots/terminal.png) -->
+<!-- ![Git sekmesi](docs/screenshots/git.png) -->
+
+_Ekran görüntüleri yakında eklenecek._
+
 ## Gereksinimler
 
-- **Linux** (Fedora 44 üzerinde, GNOME ve Wayland ile denendi; diğer dağıtımlarda da çalışması beklenir)
+- **Linux.** Yalnızca **Fedora 44, GNOME, Wayland** üzerinde test edildi. Diğer dağıtımlar, X11 oturumları ve diğer masaüstü ortamları test edilmedi; çalışması beklenir ama garanti edilmez. macOS ve Windows desteklenmez (`/proc` kullanılır).
 - Node.js 20 veya üstü
 - [Claude Code](https://code.claude.com) kurulu ve hesabınızla giriş yapılmış olmalı (Pro, Max ya da API anahtarı)
 
@@ -78,15 +88,43 @@ npm test
 
 Node'un yerleşik `node:test`'i kullanılır, ek bağımlılık yoktur. Testler fiyat hesabını, transcript ayrıştırmayı, plan limitlerinin `settings.json` üzerindeki ekle / kaldır döngüsünü ve `Git` sınıfını (geçici depolar ve sahte bir uzak depo üzerinde) kapsar. Hepsi geçici klasörlerde çalışır; gerçek `~/.claude` dosyalarına ve depolarınıza dokunmaz. Arayüz ve Electron penceresi testlerin kapsamı dışındadır. Her push ve pull request'te GitHub Actions aynı testleri çalıştırır.
 
+## Güvenlik ve veri
+
+**Okuduğu dosyalar** (yalnızca okur):
+
+| Dosya | Neden |
+| --- | --- |
+| `~/.claude/sessions/*.json` | Çalışan oturumlar ve durumları |
+| `~/.claude/projects/**/*.jsonl` | Sohbet kayıtları: token, maliyet, araç çağrıları |
+| `~/.claude.json` | Bir klasörün "güvenilir" olup olmadığı (yeni oturum başlatırken) |
+| `/proc/<pid>/*` | Süreç var mı, bilgisayarı yoran süreç var mı |
+
+(`CLAUDE_CONFIG_DIR` ayarlıysa `~/.claude` yerine o klasör kullanılır.)
+
+**Yazdığı dosyalar:**
+
+| Dosya | Ne zaman |
+| --- | --- |
+| `~/.config/agentinan/` (`settings.json`, `own-sessions.json`, `shells.json`) | Kendi ayarları ve yeniden açılacak oturumlar |
+| `~/.config/agentinan/limits.json`, `statusline.sh`, `statusline-next` | Yalnızca "Kullanım limitleri" açıksa |
+| `~/.claude/settings.json` | Yalnızca **Kullanım limitleri**'ni siz açar ya da kapatırsanız: `statusLine` alanı eklenir / eski haline döner, diğer alanlara dokunulmaz |
+| `~/.claude/projects/.../<oturum>.jsonl` | **Ad değiştir**: dosyanın sonuna bir başlık satırı eklenir |
+
+**Yedek:** `~/.claude/settings.json` her değişmeden önce aynı klasöre `settings.json.bak-<zaman damgası>` olarak kopyalanır (son 10 yedek tutulur). Yazma başarısız olursa önceki içerik otomatik geri yüklenir. Dosya geçerli JSON değilse hiç dokunulmaz. Elle geri dönmek için: `cp ~/.claude/settings.json.bak-<zaman damgası> ~/.claude/settings.json`.
+
+**Silme:** **Sil** düğmesi önce uygulamanın kendi onay penceresini gösterir (dosya adı ve alt-ajan kaydı sayısıyla). Onaylarsanız oturum kapatılır ve sohbet dosyası ile alt-ajan klasörü **çöp kutusuna** taşınır; kalıcı olarak silinmez. Çöp kutusu kullanılamıyorsa hiçbir şey silinmez ve hata gösterilir.
+
+**Komutlar:** Dışarıda çalıştırılan her şey (`claude`, `git`) argüman dizisiyle başlatılır, hiçbir zaman kabuk komutu olarak birleştirilmez; oturum ve iş kimlikleri `[A-Za-z0-9_-]` ile doğrulanır. Ayrıntılar için [SECURITY.md](SECURITY.md).
+
 ## Nasıl çalışır
 
 Veriyi `~/.claude` altındaki dosyalardan okur (`CLAUDE_CONFIG_DIR` ayarlıysa oradakilerden). Ağa kendisi bağlanmaz.
 Dışarıya dokunduğu yerler sadece sizin açtığınız özelliklerdir:
 
-- **Kullanım limitleri** açılırsa `~/.claude/settings.json` dosyasına (yedeğini alarak) bir `statusLine` ekler.
+- **Kullanım limitleri** açılırsa `~/.claude/settings.json` dosyasına bir `statusLine` ekler (yazmadan önce yedek alınır, ayrıntılar aşağıda).
 - **Git sekmesi** commit, push, pull ve fetch yapar; bunlar `git` programını çalıştırır, push / pull / fetch ağa bağlanır.
 - **Yeni oturum** Claude Code başlatır.
-- **Ad değiştirme** sohbet dosyasının sonuna bir başlık kaydı ekler; **Sil** sohbet dosyasını siler.
+- **Ad değiştirme** sohbet dosyasının sonuna bir başlık kaydı ekler; **Sil**, onay istedikten sonra sohbet dosyasını çöp kutusuna taşır.
 
 - `sessions/<pid>.json`: Çalışan her Claude Code süreci için bir dosya. Klasörü ve durumu (`busy` / `idle` / `waiting`) tutar.
   Süreç gerçekten çalışıyor mu diye `/proc/<pid>/stat` dosyasındaki başlangıç zamanıyla karşılaştırılır.
@@ -111,7 +149,7 @@ Pro ya da Max aboneliğinde bu tutarı ödemezsiniz.
 | [renderer/hog.js](renderer/hog.js) | Zorlanma uyarısı: pencere boyu kırmızı ışık, köşedeki kart, durdur / yok say |
 | [src/limits.js](src/limits.js) | Plan limitleri: status line betiği, ayara ekleme / kaldırma, okuma |
 | [test/](test) | Birim ve entegrasyon testleri (`npm test`) |
-| [src/main.js](src/main.js) | Electron penceresi, 1,5 saniyede bir okuma, bildirimler, ayarlar |
+| [src/main.js](src/main.js) | Electron penceresi, okuma (pencere açıkken 1,5 sn, gizliyken 5 sn), bildirimler, ayarlar |
 | [renderer/app.js](renderer/app.js) | Sekmeler, oturum kartları, harita bilgi kartı ve ayarlar |
 | [renderer/orbit3d.js](renderer/orbit3d.js) | 3D yörünge haritası (three.js) |
 
