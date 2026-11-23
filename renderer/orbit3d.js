@@ -1622,14 +1622,37 @@ let lastFrame = 0;
 const placed = [];
 const proj = new THREE.Vector3();
 
+// The loop only exists while the map tab is showing in a visible window: otherwise no frame is requested at all
+// (a hidden window already pauses rAF, but a hidden *tab* of ours would still wake the page 60 times a second).
+const IDLE_MS = 10_000;
+let lastInput = performance.now();
+for (const ev of ['pointermove', 'pointerdown', 'wheel', 'keydown']) window.addEventListener(ev, () => (lastInput = performance.now()), { passive: true });
+let rafId = 0;
+function tick(now) {
+  rafId = requestAnimationFrame(tick);
+  animate(now);
+}
+function syncLoop() {
+  const want = D.tab() === 'map' && !document.hidden;
+  if (want && !rafId) {
+    clock.getDelta(); // drop the time spent paused: the next step must not jump
+    rafId = requestAnimationFrame(tick);
+  } else if (!want && rafId) {
+    cancelAnimationFrame(rafId);
+    rafId = 0;
+  }
+}
+window.addEventListener('dash:tab', syncLoop);
+document.addEventListener('visibilitychange', syncLoop);
+
 function animate(now = 0) {
-  requestAnimationFrame(animate);
   const onMap = D.tab() === 'map';
   const low = D.settings().quality === 'low';
-  if (!onMap) return; // the map is hidden behind the other tabs: draw nothing
+  if (!onMap) return;
   // the heavy decoration is skipped on low quality
   for (const o of [dust, corona, sunHalo2, ...SHOOTERS.map((x) => x.line)]) o.visible = !low;
-  const gap = low ? 1000 / 30 : 0;
+  // 30 fps on low quality, while another window has focus, or when nobody has touched the map for a while
+  const gap = low || !document.hasFocus() || now - lastInput > IDLE_MS ? 1000 / 30 : 0;
   if (now - lastFrame < gap) return;
   lastFrame = now;
   controls.enabled = onMap && !drag;
@@ -1904,4 +1927,4 @@ window.addEventListener('dash:snapshot', (e) => {
 layout(D.snap().sessions);
 applyTheme(window.themes.current());
 resize();
-requestAnimationFrame(animate);
+syncLoop();
