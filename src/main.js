@@ -18,7 +18,8 @@ app.commandLine.appendSwitch('ozone-platform-hint', 'auto'); // native Wayland w
 // otherwise switching to the package would start with empty settings.
 app.setPath('userData', path.join(app.getPath('appData'), 'agentinan'));
 
-const POLL_MS = 1500;
+const POLL_MS = 1500; // while the window is on screen
+const POLL_HIDDEN_MS = 5000; // hidden to the tray or minimized: notifications and the tray still work, just a little later
 const DEFAULTS = {
   notifyWaiting: true,
   notifyDone: true,
@@ -82,6 +83,7 @@ function createWindow() {
     }
   });
   win.on('closed', () => (win = null));
+  for (const ev of ['show', 'restore']) win.on(ev, () => lastSnap && poll()); // catch up at once when the window comes back
 }
 
 function showWindow(sessionId) {
@@ -255,7 +257,7 @@ function poll() {
   // Processes straining the computer, each tied to the session that started it when there is one.
   try {
     const byPid = new Map(snap.sessions.map((s) => [s.pid, s]));
-    hogs = settings.hogAlert
+    hogs = settings.hogAlert && byPid.size // hogs only count when a session started them: no sessions, nothing to scan
       ? monitor.sample(new Set(byPid.keys()), { cpu: settings.hogCpu, cpuSecs: settings.hogSecs, memPct: settings.hogMem, ignore: settings.hogIgnore })
       : [];
     for (const h of hogs) {
@@ -359,6 +361,18 @@ if (!app.requestSingleInstanceLock()) {
       'session:delete',
       wrap(async (id) => {
         const s = liveSession(String(id));
+        // Asked here, in the main process, so the page can't skip it: names what goes and says where it goes.
+        const plan = collector.deletePlan(s.id, s.cwd);
+        const { response } = await dialog.showMessageBox(win, {
+          type: 'warning',
+          title: 'Sohbeti sil',
+          message: 'Oturum kapatılıp sohbeti çöp kutusuna taşınacak',
+          detail: `Dosya: ${plan.name}\nAlt-ajan kaydı: ${plan.subagents}\nKlasör: ${s.cwd}\n\nDosyalar çöp kutusuna taşınır; oradan geri alınabilir.`,
+          buttons: ['Vazgeç', 'Çöpe taşı'],
+          defaultId: 0,
+          cancelId: 0,
+        });
+        if (response !== 1) return { cancelled: true };
         if (s.control) terminals.stop(s.control);
         else {
           try {
@@ -375,7 +389,7 @@ if (!app.requestSingleInstanceLock()) {
         };
         for (let i = 0; i < 30 && alive(); i++) await new Promise((r) => setTimeout(r, 200)); // it would rewrite the file while it lives
         if (alive()) throw new Error('Oturum kapanmadı; sohbet silinmedi');
-        collector.deleteSession(s.id, s.cwd);
+        await collector.trashSession(s.id, s.cwd, (p) => shell.trashItem(p));
         setTimeout(poll, 300);
         return true;
       }),
@@ -459,7 +473,13 @@ if (!app.requestSingleInstanceLock()) {
     createWindow();
     createTray();
     win.webContents.on('did-finish-load', poll);
-    setInterval(poll, POLL_MS);
+    // A timer that re-arms itself, so the pace can follow the window: fast on screen, slow when nobody is looking.
+    const pollLoop = () => {
+      poll();
+      const shown = win && !win.isDestroyed() && win.isVisible() && !win.isMinimized();
+      setTimeout(pollLoop, shown ? POLL_MS : POLL_HIDDEN_MS);
+    };
+    setTimeout(pollLoop, POLL_MS);
     // AGENTINAN_SHOT=/path.png: save one screenshot after start-up and quit (for checking the UI). Development only:
     // AGENTINAN_EVAL runs arbitrary script in the page and AGENTINAN_SHOT writes a file, so a packaged app ignores them.
     if (!app.isPackaged && process.env.AGENTINAN_SHOT) {

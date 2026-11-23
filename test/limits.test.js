@@ -92,3 +92,44 @@ test('status line script stores limit JSON and still runs the user\'s own comman
   execFileSync('/bin/sh', [l.script], { input: '{"model":"x"}' });
   assert.ok(JSON.parse(fs.readFileSync(l.file, 'utf8')).rate_limits);
 });
+
+const baks = () => fs.readdirSync(claudeDir).filter((f) => f.startsWith('settings.json.bak-'));
+
+test('every write to settings.json first leaves a timestamped backup of the previous content', () => {
+  const l = fresh();
+  for (const f of baks()) fs.rmSync(path.join(claudeDir, f));
+  const original = JSON.stringify({ theme: 'dark' });
+  fs.writeFileSync(CLAUDE_SETTINGS, original);
+  l.enable();
+  l.disable();
+  const found = baks();
+  assert.strictEqual(found.length, 2); // one per write, even within the same millisecond
+  assert.ok(found.every((f) => /^settings\.json\.bak-\d{4}-\d\d-\d\dT/.test(f)));
+  assert.ok(found.some((f) => fs.readFileSync(path.join(claudeDir, f), 'utf8') === original));
+});
+
+test('a failed write puts the previous settings.json back', () => {
+  const l = fresh();
+  const original = JSON.stringify({ theme: 'dark' });
+  fs.writeFileSync(CLAUDE_SETTINGS, original);
+  const realRename = fs.renameSync;
+  fs.renameSync = () => {
+    // simulate a crash after the file was clobbered
+    fs.writeFileSync(CLAUDE_SETTINGS, 'GARBAGE');
+    throw new Error('disk full');
+  };
+  try {
+    assert.throws(() => l.writeSettings({ theme: 'light' }), /disk full/);
+  } finally {
+    fs.renameSync = realRename;
+  }
+  assert.strictEqual(fs.readFileSync(CLAUDE_SETTINGS, 'utf8'), original);
+  assert.ok(!fs.readdirSync(claudeDir).some((f) => f.endsWith('.tmp')));
+});
+
+test('only the newest backups are kept', () => {
+  const l = fresh();
+  fs.writeFileSync(CLAUDE_SETTINGS, '{}');
+  for (let i = 0; i < 15; i++) l.writeSettings({ i });
+  assert.ok(baks().length <= 10);
+});

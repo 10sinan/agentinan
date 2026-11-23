@@ -18,6 +18,16 @@ function shq(s) {
   return `'${String(s).replace(/'/g, `'\\''`)}'`;
 }
 
+const KEEP_BACKUPS = 10;
+// Keeps the newest KEEP_BACKUPS settings.json.bak-* files, removes older ones.
+function pruneBackups() {
+  try {
+    const prefix = path.basename(CLAUDE_SETTINGS) + '.bak-';
+    const old = fs.readdirSync(CLAUDE_DIR).filter((f) => f.startsWith(prefix)).sort().slice(0, -KEEP_BACKUPS);
+    for (const f of old) fs.rmSync(path.join(CLAUDE_DIR, f), { force: true });
+  } catch {}
+}
+
 class Limits {
   constructor(dataDir) {
     this.dir = dataDir;
@@ -59,11 +69,38 @@ exit 0
     return j;
   }
 
+  // Writes settings.json atomically. Before each write the current file is copied to settings.json.bak-<timestamp>
+  // (next to it); if the write fails, that copy is put back and the error is rethrown. Returns the backup path (or null
+  // when there was no file yet).
   writeSettings(j) {
     fs.mkdirSync(CLAUDE_DIR, { recursive: true });
+    const existed = fs.existsSync(CLAUDE_SETTINGS);
+    let bak = null;
+    if (existed) {
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      for (let i = 0; !bak; i++) {
+        const cand = `${CLAUDE_SETTINGS}.bak-${stamp}${i ? '-' + i : ''}`;
+        try {
+          fs.copyFileSync(CLAUDE_SETTINGS, cand, fs.constants.COPYFILE_EXCL); // never overwrites an older backup
+          bak = cand;
+        } catch (e) {
+          if (e.code !== 'EEXIST' || i > 99) throw e;
+        }
+      }
+      pruneBackups();
+    }
     const tmp = `${CLAUDE_SETTINGS}.agentinan.${process.pid}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(j, null, 2) + '\n');
-    fs.renameSync(tmp, CLAUDE_SETTINGS);
+    try {
+      fs.writeFileSync(tmp, JSON.stringify(j, null, 2) + '\n');
+      fs.renameSync(tmp, CLAUDE_SETTINGS);
+    } catch (err) {
+      try {
+        fs.rmSync(tmp, { force: true });
+        if (bak) fs.copyFileSync(bak, CLAUDE_SETTINGS); // put the previous content back
+      } catch {}
+      throw err;
+    }
+    return bak;
   }
 
   enabled() {
