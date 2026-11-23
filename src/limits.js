@@ -10,6 +10,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { writeFileAtomic } = require('./atomic');
 
 const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
 const CLAUDE_SETTINGS = path.join(CLAUDE_DIR, 'settings.json');
@@ -18,7 +19,7 @@ function shq(s) {
   return `'${String(s).replace(/'/g, `'\\''`)}'`;
 }
 
-const KEEP_BACKUPS = 10;
+const KEEP_BACKUPS = 5;
 // Keeps the newest KEEP_BACKUPS settings.json.bak-* files, removes older ones.
 function pruneBackups() {
   try {
@@ -89,13 +90,14 @@ exit 0
       }
       pruneBackups();
     }
-    const tmp = `${CLAUDE_SETTINGS}.agentinan.${process.pid}.tmp`;
     try {
-      fs.writeFileSync(tmp, JSON.stringify(j, null, 2) + '\n');
-      fs.renameSync(tmp, CLAUDE_SETTINGS);
+      // the text is parsed back before anything is written: it must be a JSON object
+      const text = JSON.stringify(j, null, 2) + '\n';
+      const back = JSON.parse(text);
+      if (!back || typeof back !== 'object' || Array.isArray(back)) throw new Error('settings.json beklenen biçimde değil');
+      writeFileAtomic(CLAUDE_SETTINGS, text, { json: true });
     } catch (err) {
       try {
-        fs.rmSync(tmp, { force: true });
         if (bak) fs.copyFileSync(bak, CLAUDE_SETTINGS); // put the previous content back
       } catch {}
       throw err;

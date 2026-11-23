@@ -12,6 +12,7 @@ const { trayIcon } = require('./trayicon');
 const { guardIpc } = require('./ipc-guard');
 const { isDirectory } = require('./safepath');
 const { sanitize } = require('./settings-schema');
+const { writeFileAtomic } = require('./atomic');
 
 app.commandLine.appendSwitch('ozone-platform-hint', 'auto'); // native Wayland when available (Fedora's default session)
 // One data folder (~/.config/agentinan) for both `npm start` and the packaged app, whose name is "Agentinan":
@@ -52,7 +53,7 @@ function loadSettings() {
 function saveSettings() {
   try {
     fs.mkdirSync(path.dirname(settingsFile()), { recursive: true });
-    fs.writeFileSync(settingsFile(), JSON.stringify(settings, null, 2));
+    writeFileAtomic(settingsFile(), JSON.stringify(settings, null, 2), { json: true });
   } catch {}
 }
 
@@ -199,12 +200,12 @@ function saveOwnSessions() {
   try {
     const own = terminals.ownPids();
     const list = (lastSnap?.sessions || []).filter((s) => own.has(s.pid)).map((s) => ({ id: s.id, cwd: s.cwd }));
-    fs.writeFileSync(ownFile(), JSON.stringify(list));
+    writeFileAtomic(ownFile(), JSON.stringify(list), { json: true });
   } catch (e) {
     console.error('own sessions not saved', e);
   }
   try {
-    fs.writeFileSync(shellsFile(), JSON.stringify(shells.cwds()));
+    writeFileAtomic(shellsFile(), JSON.stringify(shells.cwds()), { json: true });
   } catch (e) {
     console.error('terminals not saved', e);
   }

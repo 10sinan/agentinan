@@ -110,7 +110,7 @@ Node'un yerleşik `node:test`'i kullanılır, ek bağımlılık yoktur. Testler 
 | `~/.claude/settings.json` | Yalnızca **Kullanım limitleri**'ni siz açar ya da kapatırsanız: `statusLine` alanı eklenir / eski haline döner, diğer alanlara dokunulmaz |
 | `~/.claude/projects/.../<oturum>.jsonl` | **Ad değiştir**: dosyanın sonuna bir başlık satırı eklenir |
 
-**Yedek:** `~/.claude/settings.json` her değişmeden önce aynı klasöre `settings.json.bak-<zaman damgası>` olarak kopyalanır (son 10 yedek tutulur). Yazma başarısız olursa önceki içerik otomatik geri yüklenir. Dosya geçerli JSON değilse hiç dokunulmaz. Elle geri dönmek için: `cp ~/.claude/settings.json.bak-<zaman damgası> ~/.claude/settings.json`.
+**Yedek:** `~/.claude/settings.json` her değişmeden önce aynı klasöre `settings.json.bak-<zaman damgası>` olarak kopyalanır (son 5 yedek tutulur). Yazma başarısız olursa önceki içerik otomatik geri yüklenir. Dosya geçerli JSON değilse hiç dokunulmaz. Elle geri dönmek için: `cp ~/.claude/settings.json.bak-<zaman damgası> ~/.claude/settings.json`.
 
 **Silme:** **Sil** düğmesi önce uygulamanın kendi onay penceresini gösterir (dosya adı ve alt-ajan kaydı sayısıyla). Onaylarsanız oturum kapatılır ve sohbet dosyası ile alt-ajan klasörü **çöp kutusuna** taşınır; kalıcı olarak silinmez. Çöp kutusu kullanılamıyorsa hiçbir şey silinmez ve hata gösterilir.
 
