@@ -73,6 +73,11 @@ function createWindow() {
   win.webContents.on('will-navigate', (e) => e.preventDefault());
   win.webContents.on('will-redirect', (e) => e.preventDefault());
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  win.webContents.on('will-attach-webview', (e) => e.preventDefault()); // no <webview> at all
+  // The page asks for nothing (camera, location, notifications go through the main process): every request is refused.
+  const ses = win.webContents.session;
+  ses.setPermissionRequestHandler((_wc, _perm, cb) => cb(false));
+  ses.setPermissionCheckHandler(() => false);
   win.webContents.on('console-message', (e) => {
     if (e.level === 'warning' || e.level === 'error') console.error(`[page] ${e.message} (${e.sourceId}:${e.lineNumber})`);
   });
