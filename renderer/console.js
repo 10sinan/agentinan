@@ -83,6 +83,18 @@
   }
   new ResizeObserver(() => requestAnimationFrame(fitNow)).observe(termHost);
 
+  // The shell drawer (dock.js) floats over the bottom of the window: it never changes the size of this terminal, so
+  // no resize reaches Claude's pty (an inline TUI redraws wrongly after a row change). The terminal is only moved up
+  // (a transform: no layout, no resize) by what the drawer covers, so the bottom rows stay visible.
+  function applyDockShift() {
+    const dock = document.getElementById('dock');
+    const open = document.body.classList.contains('dock-open');
+    const px = window.dockShift(termHost.getBoundingClientRect().bottom, dock.getBoundingClientRect().top, open);
+    termHost.style.setProperty('--dock-shift', px + 'px');
+  }
+  window.addEventListener('dash:dock', applyDockShift);
+  window.addEventListener('resize', applyDockShift);
+
   const controllable = () => D.snap().sessions.filter((s) => s.control);
 
   // Which terminal to show: the selected session if it's controllable, else the one already shown, else the first.
@@ -154,6 +166,7 @@
     update(true);
     requestAnimationFrame(() => {
       fitNow();
+      applyDockShift(); // the drawer may have been opened while another tab was showing
       if (current) text.focus();
     });
   });

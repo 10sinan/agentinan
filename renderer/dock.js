@@ -122,9 +122,12 @@
     dock.style.height = height + 'px';
     document.body.classList.toggle('dock-open', v);
     $('dockBtn').classList.toggle('on', v);
+    notify();
     if (v && !shells.size) newShell();
     else if (v) show(current || [...shells.keys()][0]);
   }
+  // console.js moves the Claude terminal up by what the drawer covers (the drawer itself resizes nothing behind it)
+  const notify = () => window.dispatchEvent(new Event('dash:dock'));
   const toggle = () => setOpen(!open);
 
   $('dockBtn').onclick = toggle;
@@ -152,6 +155,7 @@
     const move = (m) => {
       height = Math.max(120, Math.min(window.innerHeight - 160, startH + (startY - m.clientY)));
       dock.style.height = height + 'px';
+      notify();
     };
     const up = () => {
       window.removeEventListener('pointermove', move);
