@@ -37,13 +37,14 @@ Arayüz beş sekmeden oluşur: **Harita**, **Oturumlar**, **Terminal**, **Git** 
 
 ## Ekran görüntüleri
 
-<!-- Görüntüleri docs/screenshots/ altına koyun ve aşağıdaki satırların yorumunu kaldırın. -->
-<!-- ![Yörünge haritası](docs/screenshots/map.png) -->
-<!-- ![Oturumlar](docs/screenshots/sessions.png) -->
-<!-- ![Terminal](docs/screenshots/terminal.png) -->
-<!-- ![Git sekmesi](docs/screenshots/git.png) -->
+![Yörünge haritası](docs/screenshots/map.png)
 
-_Ekran görüntüleri yakında eklenecek._
+![Terminal sekmesi](docs/screenshots/terminal.png)
+
+<!-- Oturumlar ve Git görüntüleri eklenince yorumu kaldırın:
+![Oturumlar](docs/screenshots/sessions.png)
+![Git sekmesi](docs/screenshots/git.png)
+-->
 
 ## Gereksinimler
 
