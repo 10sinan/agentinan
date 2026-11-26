@@ -110,6 +110,11 @@ class Terminals {
     return m;
   }
 
+  // The interactive claude processes Agentinan runs itself, with what is needed to resume them next time.
+  ownTerms() {
+    return [...this.terms.values()].filter((t) => t.kind === 'own').map((t) => ({ pid: t.proc.pid, resumeId: t.resumeId, cwd: t.cwd }));
+  }
+
   // Starts a new session in `cwd`. Resolves to { key, kind }.
   start(cwd, name, prompt) {
     if (typeof cwd !== 'string' || !path.isAbsolute(cwd) || !fs.statSync(cwd).isDirectory()) throw new Error('Klasör bulunamadı');
@@ -117,6 +122,7 @@ class Terminals {
     if (!isTrusted(cwd)) {
       // Background sessions need a trusted folder; run claude here so its trust question shows in our terminal.
       const t = this.spawn(null, nameArgs, cwd, 'own');
+      t.cwd = cwd;
       const key = `own:${t.proc.pid}`;
       this.terms.delete(null);
       t.key = key;
@@ -146,6 +152,8 @@ class Terminals {
       return null;
     }
     const t = this.spawn(null, ['--resume', String(id)], cwd, 'own');
+    t.resumeId = String(id); // remembered until the session shows up in a snapshot under its (maybe new) id
+    t.cwd = cwd;
     const key = `own:${t.proc.pid}`;
     this.terms.delete(null);
     t.key = key;
