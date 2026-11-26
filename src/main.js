@@ -13,6 +13,7 @@ const { guardIpc } = require('./ipc-guard');
 const { isDirectory } = require('./safepath');
 const { sanitize } = require('./settings-schema');
 const { writeFileAtomic } = require('./atomic');
+const { ownSessionList } = require('./ownsessions');
 
 app.commandLine.appendSwitch('ozone-platform-hint', 'auto'); // native Wayland when available (Fedora's default session)
 // One data folder (~/.config/agentinan) for both `npm start` and the packaged app, whose name is "Agentinan":
@@ -200,17 +201,27 @@ function annotate(snap) {
 const ownFile = () => path.join(app.getPath('userData'), 'own-sessions.json');
 const shellsFile = () => path.join(app.getPath('userData'), 'shells.json');
 let pendingShells = []; // folders of the drawer's terminals from last time; the page asks for them once
-function saveOwnSessions() {
-  if (!lastSnap) return; // never polled (e.g. a second instance that quit at once): keep the saved list
+let lastOwnJson = null;
+// Writes the list of own sessions when it changed. Also called on every poll, so a crash, a kill or a logout that
+// skips will-quit does not lose the sessions.
+function persistOwnSessions() {
+  const terms = terminals.ownTerms();
+  if (!lastSnap && !terms.length) return; // nothing known yet: keep the saved list
+  const json = JSON.stringify(ownSessionList(terms, lastSnap?.sessions));
+  if (json === lastOwnJson) return;
   try {
-    const own = terminals.ownPids();
-    const list = (lastSnap?.sessions || []).filter((s) => own.has(s.pid)).map((s) => ({ id: s.id, cwd: s.cwd }));
-    writeFileAtomic(ownFile(), JSON.stringify(list), { json: true });
+    writeFileAtomic(ownFile(), json, { json: true });
+    lastOwnJson = json;
   } catch (e) {
     console.error('own sessions not saved', e);
   }
+}
+function saveOwnSessions() {
+  persistOwnSessions();
   try {
-    writeFileAtomic(shellsFile(), JSON.stringify(shells.cwds()), { json: true });
+    // folders the page has not asked for yet (a quick quit after the start) are kept, not forgotten
+    const cwds = shells.cwds();
+    writeFileAtomic(shellsFile(), JSON.stringify(cwds.length ? cwds : pendingShells), { json: true });
   } catch (e) {
     console.error('terminals not saved', e);
   }
@@ -219,7 +230,7 @@ function restoreOwnSessions() {
   let list = [];
   try {
     list = JSON.parse(fs.readFileSync(ownFile(), 'utf8'));
-    fs.unlinkSync(ownFile());
+    if (settings.restoreOwn === false) fs.unlinkSync(ownFile()); // otherwise it stays until a save replaces it
   } catch {}
   if (settings.restoreOwn !== false && Array.isArray(list)) for (const s of list.slice(0, 20)) terminals.resume(s?.id, s?.cwd);
   try {
@@ -299,6 +310,7 @@ function poll() {
     }
   }
   lastSnap = snap;
+  persistOwnSessions();
   updateTray(snap);
   if (win && !win.isDestroyed()) win.webContents.send('snapshot', snap);
 }
